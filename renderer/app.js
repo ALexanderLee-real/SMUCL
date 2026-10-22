@@ -25,6 +25,7 @@ const S = {
   savesLoading: false,
   appInfo: null,
   updateInfo: null,
+  updateState: null,
   updatePrompted: null,
 };
 
@@ -178,18 +179,46 @@ function closeModal() {
 async function checkUpdate(silent = true) {
   if (!silent) toast('正在检查更新…');
   const r = await api.checkUpdate({ silent });
+  S.updateState = { ...r, at: Date.now() };
+  renderUpdateState();
   if (!r.ok) {
     if (!silent) toast(r.error, 'err');
-    return;
+    return r;
   }
   S.updateInfo = r;
   if (!r.hasUpdate) {
     if (!silent) toast(`已是最新版本 v${r.current}`, 'ok');
-    return;
+    return r;
   }
-  if (silent && S.updatePrompted === r.latest) return;
+  if (S.updatePrompted === r.latest) return r;
   S.updatePrompted = r.latest;
   showUpdateModal(r);
+  return r;
+}
+
+/** 侧栏提示条 + 关于页的状态文字 */
+function renderUpdateState() {
+  const st = S.updateState;
+  const pill = $('#updatePill');
+  const about = $('#aboutUpdate');
+  if (!st || !pill) return;
+
+  if (st.ok && st.hasUpdate) {
+    pill.hidden = false;
+    pill.textContent = `发现 v${st.latest} · 点此更新`;
+    if (about) {
+      about.textContent = `发现新版本 v${st.latest}（当前 v${st.current}）`;
+      about.classList.add('has-new');
+    }
+  } else {
+    pill.hidden = true;
+    if (about) {
+      about.classList.remove('has-new');
+      about.textContent = st.ok
+        ? `已是最新版本 v${st.current} · ${fmtTime(st.at)} 检查`
+        : `检查失败：${st.error}`;
+    }
+  }
 }
 
 function showUpdateModal(info) {
@@ -790,6 +819,9 @@ function bindEvents() {
   // 应用更新
   $('#btnCheckUpdate').onclick = () => checkUpdate(false);
   $('#btnShowChangelog').onclick = () => showChangelog(S.appInfo ? S.appInfo.version : null);
+  $('#updatePill').onclick = () => {
+    if (S.updateInfo && S.updateInfo.hasUpdate) showUpdateModal(S.updateInfo);
+  };
 
   $$('[data-open]').forEach((b) => (b.onclick = () => api.openUrl(b.dataset.open)));
 
@@ -1200,18 +1232,20 @@ async function boot() {
     /* 静默失败，避免打扰 */
   });
 
-  // 升级后首次启动弹出更新日志
+  // 升级后首次启动弹出更新日志（若有可用更新，让位给更新提示）
   const curVersion = S.appInfo && S.appInfo.version;
   if (curVersion && S.settings.lastSeenVersion !== curVersion) {
     setTimeout(() => {
-      showChangelog(curVersion);
+      const hasNew = S.updateState && S.updateState.ok && S.updateState.hasUpdate;
+      if (!hasNew) showChangelog(curVersion);
       api.save({ lastSeenVersion: curVersion });
-    }, 800);
+    }, 3000);
   }
 
-  // 启动后自动检查自身更新
+  // 启动后自动检查自身更新，并在运行期间每 30 分钟复查一次
   if (S.settings.autoUpdateCheck !== false) {
-    setTimeout(() => checkUpdate(true), 6000);
+    setTimeout(() => checkUpdate(true), 2500);
+    setInterval(() => checkUpdate(true), 30 * 60 * 1000);
   }
 
   if (!S.installed.length) {
