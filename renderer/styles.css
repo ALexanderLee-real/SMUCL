@@ -348,7 +348,16 @@ html, body {
   pointer-events: none;
 }
 .select-wrap select { appearance: none; cursor: pointer; padding-right: 34px; }
-.select-wrap select option { background: #141924; color: var(--txt); }
+/* 下拉列表由系统绘制，必须给 option 单独上色，否则浅色主题会变成深底深字 */
+.select-wrap select option {
+  background: var(--bg-2);
+  color: var(--txt);
+}
+.select-wrap select option:checked {
+  background: var(--brand-2);
+  color: #fff;
+}
+.select-wrap select:focus { border-color: var(--brand-2); }
 
 .row { display: flex; gap: 8px; align-items: center; }
 .row .input { flex: 1; }
@@ -895,7 +904,10 @@ input[type="range"]::-webkit-slider-thumb { height: 18px; width: 18px; }
   --log-bg: rgba(9, 12, 18, 0.96);
 }
 
+html[data-theme="dark"] { color-scheme: dark; }
+
 html[data-theme="light"] {
+  color-scheme: light;
   color-scheme: light;
   --ink: 16, 26, 42;
   --bg-0: #e9edf4;

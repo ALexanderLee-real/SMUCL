@@ -1099,12 +1099,30 @@ function bindEvents() {
       }
     });
   }, 400);
-  $('#playerName').addEventListener('input', (e) => {
-    const name = e.target.value.replace(/[^\w\u4e00-\u9fa5]/g, '').slice(0, 16);
-    e.target.value = name;
+  // 玩家名输入：中文输入法拼写过程中不能改写 value，否则会打断候选词、吞掉已敲的字母
+  let nameComposing = false;
+  const nameInput = $('#playerName');
+  const syncName = (name) => {
     $('#sidePlayer').textContent = name || 'Steve';
     $('#avatar').textContent = (name || 'S').slice(0, 1).toUpperCase();
     saveName(name || 'Steve');
+  };
+  const sanitizeName = () => {
+    const raw = nameInput.value;
+    const name = raw.replace(/[^\w\u4e00-\u9fa5]/g, '').slice(0, 16);
+    if (name !== raw) nameInput.value = name;
+    syncName(name);
+  };
+  nameInput.addEventListener('compositionstart', () => {
+    nameComposing = true;
+  });
+  nameInput.addEventListener('compositionend', () => {
+    nameComposing = false;
+    sanitizeName();
+  });
+  nameInput.addEventListener('input', (e) => {
+    if (nameComposing || e.isComposing) return;
+    sanitizeName();
   });
 
   const saveMem = debounce((val) => {

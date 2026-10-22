@@ -9,7 +9,7 @@
 [![Electron](https://img.shields.io/badge/Electron-45-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white)](#)
 [![License](https://img.shields.io/badge/license-MIT-3DA639)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.3.0-3b7dd8](#)
+[![Version](https://img.shields.io/badge/version-1.3.1-3b7dd8](#)
 [![Release](https://img.shields.io/github/v/release/Survaetr/SMUCL?label=release&color=3DA639)](https://github.com/Survaetr/SMUCL/releases)
 
 </div>
@@ -138,6 +138,12 @@ SMUCL/
 → 把 `dist/app-<version>.zip` 上传到对应 Release。
 
 ## 更新记录
+
+**v1.3.1**
+
+- 修复浅色主题下版本下拉列表深底深字几乎看不见的问题，下拉项现在跟随主题配色
+- 修复中文输入法输入玩家名时被吞字：拼写过程中不再改写输入框，合成结束后才过滤
+- 原生控件（滚动条、下拉弹层）跟随深浅主题
 
 **v1.3.0**
 
