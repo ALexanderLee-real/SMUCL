@@ -38,6 +38,9 @@ contextBridge.exposeInMainWorld('smucl', {
   openPath: (target) => ipcRenderer.invoke('open:path', { target }),
   openUrl: (url) => ipcRenderer.invoke('open:url', { url }),
 
+  // 显卡偏好（Windows 图形设置）
+  applyGpuAll: (mode) => ipcRenderer.invoke('gpu:applyAll', { mode }),
+
   // 应用自身更新
   appInfo: () => ipcRenderer.invoke('app:info'),
   checkUpdate: (opts) => ipcRenderer.invoke('update:check', opts || {}),

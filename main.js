@@ -12,6 +12,7 @@ const launcher = require('./core/launch');
 const dirsLib = require('./core/dirs');
 const savesLib = require('./core/saves');
 const updater = require('./core/updater');
+const gpuLib = require('./core/gpu');
 
 // Windows 上部分镜像的 AAAA 记录不可达，IPv6 优先会白等十几次超时
 try {
@@ -413,6 +414,45 @@ function registerIpc() {
         ok: true,
         data: `"${built.java}" ${built.args.map((a) => (a.includes(' ') ? `"${a}"` : a)).join(' ')}`,
       };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // ---------------- 显卡偏好 ----------------
+  // 把「每个版本实际会用到的 javaw.exe」写进 Windows 图形设置，让 MC 走独立显卡。
+  ipcMain.handle('gpu:applyAll', async (_e, { mode = 'high' } = {}) => {
+    if (!gpuLib.supported()) return { ok: false, error: '该功能仅支持 Windows' };
+    if (!(mode in gpuLib.MODES)) return { ok: false, error: `未知的显卡模式：${mode}` };
+    try {
+      if (!javaCache.length) await refreshJava().catch(() => {});
+      const settings = settingsLib.all();
+      const installed = versionLib.listInstalled(getDirs());
+      const exePaths = [];
+      const versions = [];
+
+      for (const v of installed) {
+        let required = 8;
+        try {
+          const meta = versionLib.loadVersionJson(v.dir, v.id);
+          required = (meta.javaVersion && meta.javaVersion.majorVersion) || 8;
+        } catch {
+          /* 元数据损坏的实例跳过继承信息，按 Java 8 兜底 */
+        }
+        const preferred = settings.javaPath
+          ? javaCache.find((j) => j.java === settings.javaPath || j.path === settings.javaPath)
+          : null;
+        const picked = preferred || javaLib.pick(javaCache, required);
+        if (!picked) continue;
+        exePaths.push(picked.path);
+        versions.push({ id: v.id, dir: v.dir, java: picked.path, required, actual: picked.major });
+      }
+
+      // 没有实例时，至少把手动指定的 Java 也写进去
+      if (settings.javaPath) exePaths.push(settings.javaPath);
+
+      const result = await gpuLib.applyAll(exePaths, mode);
+      return { ok: true, data: { ...result, versions, count: versions.length } };
     } catch (e) {
       return { ok: false, error: e.message };
     }

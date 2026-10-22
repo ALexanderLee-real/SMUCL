@@ -611,7 +611,7 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); }
 }
 .switch i::after {
   content: ""; position: absolute; left: 2px; top: 2px;
-  width: 16px; height: 16px; border-radius: 3px;
+  width: 16px; height: 16px; border-radius: 50%;
   background: #7b879d; transition: transform 0.18s, background 0.18s;
 }
 .switch input:checked + i { background: rgba(59, 125, 216, 0.45); border-color: rgba(106, 164, 240, 0.6); }

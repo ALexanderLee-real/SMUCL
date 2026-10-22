@@ -457,6 +457,42 @@ function renderDirs() {
     .join('');
 }
 
+/* ---------------------------------------------------------------- 显卡偏好 */
+async function applyGpuPreference(mode) {
+  const el = $('#gpuPerfSwitch');
+  const label = mode === 'auto' ? '恢复自动选择' : '使用高性能显卡';
+  el.disabled = true;
+  try {
+    const r = await api.applyGpuAll(mode);
+    if (!r.ok) {
+      toast(r.error, 'err');
+      return false;
+    }
+    const d = r.data;
+    const okCount = d.applied.length;
+    const failCount = d.failed.length;
+    if (!okCount && !failCount) {
+      toast('没有找到可用 Java，请先在上方扫描或手动指定 javaw.exe', 'warn');
+      return false;
+    }
+    if (!failCount) {
+      toast(`已为 ${okCount} 个 Java 设置「${label}」，覆盖 ${d.count} 个版本`, 'ok');
+      return true;
+    }
+    openModal({
+      title: '显卡偏好设置结果',
+      sub: `${label} · 成功 ${okCount} 个，失败 ${failCount} 个`,
+      html: `<div class="gpu-result">${d.failed
+        .map((f) => `<p><code>${esc(f.exe)}</code><br>${esc(f.error || '写入失败')}</p>`)
+        .join('')}</div>`,
+      buttons: [{ text: '知道了', primary: true }],
+    });
+    return okCount > 0;
+  } finally {
+    el.disabled = false;
+  }
+}
+
 function renderSettings() {
   const s = S.settings;
 
@@ -488,21 +524,25 @@ function renderSettings() {
   $('#javaPathInput').value = s.javaPath || '';
   $('#mcDirInput').value = s.mcDir || '';
 
+  const MEM_STEP = 102; // 0.1 GB
   const memGB = (m) => `${(m / 1024).toFixed(1).replace('.0', '')} GB`;
-  const maxMem = Math.min(16384, Math.max(2048, Math.floor(S.memoryTotal / 1024) * 1024));
+  const maxMem = Math.max(1024, 1024 + Math.floor((S.memoryTotal - 1024) / MEM_STEP) * MEM_STEP);
+  const memVal = Math.min(maxMem, Math.max(1024, Math.round(s.memory / MEM_STEP) * MEM_STEP));
   [$('#memory'), $('#memory2')].forEach((el) => {
     el.max = String(maxMem);
-    el.value = String(Math.min(s.memory, maxMem));
+    el.step = String(MEM_STEP);
+    el.value = String(memVal);
   });
-  $('#memLabel').textContent = memGB(s.memory);
-  $('#memLabel2').textContent = memGB(s.memory);
-  $('#memHint').textContent = `物理内存 ${(S.memoryTotal / 1024).toFixed(0)} GB，建议分配 4~8 GB，不超过一半。`;
+  $('#memLabel').textContent = memGB(memVal);
+  $('#memLabel2').textContent = memGB(memVal);
+  $('#memHint').textContent = `物理内存 ${(S.memoryTotal / 1024).toFixed(0)} GB，上限已按实际内存放开，建议不超过一半。`;
 
   $('#jvmArgs').value = s.jvmArgs || '';
   $('#fullscreenSwitch').checked = Boolean(s.fullscreen);
   $('#showLogSwitch').checked = s.showLog !== false;
   $('#autoCheckSwitch').checked = s.autoCheck !== false;
   $('#gpuFallbackSwitch').checked = Boolean(s.gpuFallback);
+  $('#gpuPerfSwitch').checked = Boolean(s.gpuHighPerf);
   $('#threads').value = String(s.downloadThreads || 8);
   $('#threadLabel').textContent = String(s.downloadThreads || 8);
 
@@ -1037,6 +1077,16 @@ function bindEvents() {
   $('#gpuFallbackSwitch').onchange = (e) => {
     api.save({ gpuFallback: e.target.checked });
     toast('设置已保存，重启启动器后生效');
+  };
+
+  $('#gpuPerfSwitch').onchange = async (e) => {
+    const on = e.target.checked;
+    const ok = await applyGpuPreference(on ? 'high' : 'auto');
+    if (!ok) {
+      e.target.checked = !on;
+      return;
+    }
+    api.save({ gpuHighPerf: on });
   };
 
   $('#btnPickMcDir').onclick = async () => {
