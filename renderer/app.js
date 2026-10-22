@@ -618,39 +618,19 @@ function updateInstallRow(p) {
 }
 
 /* ---------------------------------------------------------------- 存档 */
-function renderSaves() {
-  const list = $('#saveList');
-  const empty = $('#savesEmpty');
-  const saves = S.saves || [];
-
-  const totalSize = saves.reduce((n, s) => n + (s.size || 0), 0);
-  const dirs = new Set(saves.map((s) => s.dir));
-  $('#sumCount').textContent = `${saves.length} 个`;
-  $('#sumSize').textContent = fmtBytes(totalSize);
-  $('#sumDirs').textContent = `${dirs.size} 个`;
-  $('#navSaveCount').textContent = String(saves.length);
-
-  if (!saves.length) {
-    list.innerHTML = '';
-    empty.hidden = false;
-    return;
-  }
-  empty.hidden = true;
-
-  list.innerHTML = saves
-    .map((s) => {
-      const icon = s.icon
-        ? `<img src="${s.icon}" alt="" />`
-        : `<svg viewBox="0 0 24 24"><path d="M4 7.5 12 4l8 3.5v9L12 20l-8-3.5z"/><path d="M4 7.5 12 11l8-3.5"/><path d="M12 11v9"/></svg>`;
-      const tags = [
-        s.hardcore ? '<span class="chip chip-gold">硬核</span>' : '',
-        s.wasModded ? '<span class="chip">模组世界</span>' : '',
-        s.broken ? '<span class="chip chip-gold">无法读取</span>' : '',
-      ]
-        .filter(Boolean)
-        .join('');
-      const where = s.instanceId ? `实例 ${s.instanceId}` : '全局存档';
-      return `
+function saveCardHtml(s) {
+  const icon = s.icon
+    ? `<img src="${s.icon}" alt="" />`
+    : `<svg viewBox="0 0 24 24"><path d="M4 7.5 12 4l8 3.5v9L12 20l-8-3.5z"/><path d="M4 7.5 12 11l8-3.5"/><path d="M12 11v9"/></svg>`;
+  const tags = [
+    s.hardcore ? '<span class="chip chip-gold">硬核</span>' : '',
+    s.wasModded ? '<span class="chip">模组世界</span>' : '',
+    s.broken ? '<span class="chip chip-gold">无法读取</span>' : '',
+  ]
+    .filter(Boolean)
+    .join('');
+  const where = s.instanceId ? `实例 ${s.instanceId}` : '全局存档';
+  return `
       <div class="save-card" data-path="${esc(s.path)}">
         <div class="save-icon ${s.icon ? '' : 'fallback'}">${icon}</div>
         <div class="save-body">
@@ -663,8 +643,117 @@ function renderSaves() {
           <button class="btn-sm btn-danger" data-act="trash">删除</button>
         </div>
       </div>`;
+}
+
+// 版本号降序（新的在前），快照等非数字版本退回字符串比较，未知版本垫底
+function compareVersionDesc(a, b) {
+  if (!a || !b) return a ? -1 : b ? 1 : 0;
+  const pa = String(a).split(/[^0-9]+/).filter(Boolean).map(Number);
+  const pb = String(b).split(/[^0-9]+/).filter(Boolean).map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pb[i] || 0) - (pa[i] || 0);
+    if (d) return d;
+  }
+  return String(b).localeCompare(String(a));
+}
+
+function saveVersionGroups(saves) {
+  const map = new Map();
+  for (const s of saves) {
+    const v = s.version || '未知版本';
+    if (!map.has(v)) map.set(v, []);
+    map.get(v).push(s);
+  }
+  for (const items of map.values()) items.sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0));
+  return map;
+}
+
+function renderSavesByPack(saves) {
+  const packs = new Map();
+  for (const s of saves) {
+    const key = s.instanceId ? `${s.dir}::${s.instanceId}` : `${s.dir}::__global__`;
+    if (!packs.has(key)) {
+      packs.set(key, {
+        name: s.instanceId || '全局存档',
+        isGlobal: !s.instanceId,
+        path: s.dir,
+        items: [],
+      });
+    }
+    packs.get(key).items.push(s);
+  }
+  const list = Array.from(packs.values()).sort((a, b) => {
+    if (a.isGlobal !== b.isGlobal) return a.isGlobal ? 1 : -1;
+    return a.name.localeCompare(b.name, 'zh-CN');
+  });
+
+  return list
+    .map((g) => {
+      g.items.sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0));
+      return `
+      <section class="save-group">
+        <div class="save-group-head">
+          <b>${esc(g.name)}</b>
+          <span class="save-group-path" title="${esc(g.path)}">${esc(g.path)}</span>
+          <em>${g.items.length} 个存档</em>
+        </div>
+        <div class="save-list">${g.items.map(saveCardHtml).join('')}</div>
+      </section>`;
     })
     .join('');
+}
+
+function renderSavesByTime(saves) {
+  const sorted = saves.slice().sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0));
+  return `<div class="save-list">${sorted.map(saveCardHtml).join('')}</div>`;
+}
+
+function renderSavesByVersion(saves) {
+  const entries = Array.from(saveVersionGroups(saves).entries());
+  entries.sort((a, b) => compareVersionDesc(a[0], b[0]));
+
+  return entries
+    .map(
+      ([v, items]) => `
+      <section class="save-group">
+        <div class="save-group-head">
+          <b class="save-group-ver">${esc(v)}</b>
+          <em>${items.length} 个存档</em>
+        </div>
+        <div class="save-list">${items.map(saveCardHtml).join('')}</div>
+      </section>`
+    )
+    .join('');
+}
+
+function renderSaves() {
+  const list = $('#saveList');
+  const empty = $('#savesEmpty');
+  const saves = S.saves || [];
+  const mode = S.settings.saveGroup || 'folder';
+
+  const totalSize = saves.reduce((n, s) => n + (s.size || 0), 0);
+  const dirs = new Set(saves.map((s) => s.dir));
+  $('#sumCount').textContent = `${saves.length} 个`;
+  $('#sumSize').textContent = fmtBytes(totalSize);
+  $('#sumDirs').textContent = `${dirs.size} 个`;
+  $('#navSaveCount').textContent = String(saves.length);
+
+  $$('#saveGroupSwitch .seg').forEach((b) => b.classList.toggle('active', b.dataset.group === mode));
+
+  if (!saves.length) {
+    list.innerHTML = '';
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+
+  list.innerHTML =
+    mode === 'folder'
+      ? renderSavesByPack(saves)
+      : mode === 'time'
+        ? renderSavesByTime(saves)
+        : renderSavesByVersion(saves);
 }
 
 function setSavesLoading(loading, text) {
@@ -1113,6 +1202,14 @@ function bindEvents() {
     S.saves = null;
     loadSaves();
   };
+  $$('#saveGroupSwitch .seg').forEach((b) => {
+    b.onclick = () => {
+      if (S.settings.saveGroup === b.dataset.group) return;
+      S.settings.saveGroup = b.dataset.group;
+      api.save({ saveGroup: b.dataset.group });
+      renderSaves();
+    };
+  });
   $('#btnOpenPrimarySaves').onclick = () => api.openPath(`${S.settings.mcDir}\\saves`);
   $('#saveList').addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-act]');
