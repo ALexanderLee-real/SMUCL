@@ -14,6 +14,7 @@ const savesLib = require('./core/saves');
 const updater = require('./core/updater');
 const gpuLib = require('./core/gpu');
 const packLib = require('./core/pack');
+const loadersLib = require('./core/loaders');
 
 // Windows 上部分镜像的 AAAA 记录不可达，IPv6 优先会白等十几次超时
 try {
@@ -579,6 +580,72 @@ function registerIpc() {
     return { ok: true, data: res.canceled ? null : res.filePaths[0] };
   });
 
+  // ---------------- 模组加载器 ----------------
+  const sourceOf = () => (settingsLib.all().downloadSource === 'mojang' ? 'mojang' : 'bmcl');
+
+  ipcMain.handle('loader:list', async (_e, { loader, mc }) => {
+    try {
+      return await loadersLib.listVersions(loader, mc, sourceOf());
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('loader:install', async (_e, { loader, mc, loaderVersion, url }) => {
+    const settings = settingsLib.all();
+    const gameDir = settings.mcDir;
+
+    const send = (p) => {
+      if (win && !win.isDestroyed()) win.webContents.send('loader:progress', p);
+    };
+
+    // 底座没装就先补原版，否则加载器装完也启动不了
+    const baseJson = path.join(gameDir, 'versions', mc, `${mc}.json`);
+    if (!fs.existsSync(baseJson)) {
+      if (!url) return { ok: false, error: `还没有安装原版 ${mc}，请先在下方列表里下载` };
+      send({ stage: 'base', message: `先补装原版 ${mc}` });
+      try {
+        await installer.install(mc, { url }, sourceOf(), (p) => {
+          if (p && p.stage) send({ stage: 'base', percent: p.percent, message: `原版 ${mc}：${p.message || ''}` });
+        });
+      } catch (e) {
+        send({ stage: 'error', message: `原版安装失败：${e.message}` });
+        return { ok: false, error: `原版安装失败：${e.message}` };
+      }
+    }
+
+    // 按原版声明的 javaVersion 挑合适的运行时；安装器必须用 java.exe 才能拿到输出
+    let required = 17;
+    try {
+      const meta = versionLib.loadVersionJson(gameDir, mc);
+      required = (meta.javaVersion && meta.javaVersion.majorVersion) || 17;
+    } catch {
+      /* 元数据读不到就按 17 兜底 */
+    }
+    if (!javaCache.length) await refreshJava().catch(() => {});
+    const preferred = settings.javaPath
+      ? javaCache.find((j) => j.java === settings.javaPath || j.path === settings.javaPath)
+      : null;
+    const picked = preferred || javaLib.pick(javaCache, required);
+    const javaPath = picked ? picked.java || picked.path : '';
+
+    try {
+      const r = await loadersLib.install({
+        loader,
+        mcVersion: mc,
+        loaderVersion,
+        gameDir,
+        javaPath,
+        source: sourceOf(),
+        onProgress: send,
+      });
+      if (r.ok) send({ stage: 'done', message: '安装完成', id: r.data.id });
+      return r;
+    } catch (e) {
+      send({ stage: 'error', message: e.message });
+      return { ok: false, error: e.message };
+    }
+  });
   // ---------------- 整合包导入 ----------------
   ipcMain.handle('pack:pick', async () => {
     const res = await dialog.showOpenDialog(win, {

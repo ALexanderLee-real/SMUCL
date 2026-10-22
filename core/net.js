@@ -13,16 +13,17 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function fetchJson(url, { timeout = 25000, retries = 2 } = {}) {
+async function fetchJson(url, { timeout = 25000, retries = 2, raw = false, headers = {} } = {}) {
   let lastErr;
   for (let i = 0; i <= retries; i++) {
     try {
       const res = await fetch(url, {
-        headers: { 'User-Agent': UA, Accept: 'application/json' },
+        headers: { 'User-Agent': UA, Accept: raw ? '*/*' : 'application/json', ...headers },
         signal: AbortSignal.timeout(timeout),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
+      // raw: 拿纯文本（XML 之类），默认按 JSON 解析
+      return raw ? await res.text() : await res.json();
     } catch (e) {
       lastErr = e;
       if (i < retries) await sleep(400 * (i + 1));

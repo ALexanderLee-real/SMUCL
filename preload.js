@@ -34,6 +34,10 @@ contextBridge.exposeInMainWorld('smucl', {
   kill: () => ipcRenderer.invoke('game:kill'),
   save: (patch) => ipcRenderer.invoke('settings:save', patch),
   pickDir: () => ipcRenderer.invoke('dialog:pickDir'),
+  listLoaders: (loader, mc) => ipcRenderer.invoke('loader:list', { loader, mc }),
+  installLoader: (loader, mc, loaderVersion, url) =>
+    ipcRenderer.invoke('loader:install', { loader, mc, loaderVersion, url }),
+  onLoader: (cb) => on('loader:progress', cb),
   pickPack: () => ipcRenderer.invoke('pack:pick'),
   inspectPack: (file) => ipcRenderer.invoke('pack:inspect', { file }),
   importPack: (file, targetDir) => ipcRenderer.invoke('pack:import', { file, targetDir }),

@@ -82,7 +82,7 @@
             <span class="badge-offline">本地</span>
           </div>
           <button class="update-pill" id="updatePill" hidden>发现新版本</button>
-          <div class="side-hint">SMUCL v1.3.1 · 基于 Electron</div>
+          <div class="side-hint">SMUCL v1.4.0 · 基于 Electron</div>
         </div>
       </aside>
 
@@ -171,7 +171,7 @@
               </div>
 
               <div class="card notice-card">
-                <div class="card-head"><h2>公告</h2><span class="chip">v1.3.1</span></div>
+                <div class="card-head"><h2>公告</h2><span class="chip">v1.4.0</span></div>
                 <ul class="notice-list">
                   <li>
                     <b>镜像加速已开启</b>
@@ -227,6 +227,29 @@
             <span id="checkTime">正在检查最新版本…</span>
             <span class="check-sep">·</span>
             <span>后台每 5 分钟自动检查</span>
+          </div>
+
+          <div class="card loader-card">
+            <div class="card-head">
+              <h2>安装模组加载器</h2>
+              <span class="chip" id="loaderBaseHint">需要先有对应原版</span>
+            </div>
+            <div class="loader-row">
+              <div class="segmented" id="loaderSwitch">
+                <button class="seg active" data-loader="fabric">Fabric</button>
+                <button class="seg" data-loader="quilt">Quilt</button>
+                <button class="seg" data-loader="forge">Forge</button>
+                <button class="seg" data-loader="neoforge">NeoForge</button>
+              </div>
+              <div class="select-wrap loader-select">
+                <select id="loaderMc"></select>
+              </div>
+              <div class="select-wrap loader-select">
+                <select id="loaderVer"></select>
+              </div>
+              <button class="btn-sm primary" id="btnInstallLoader">安装</button>
+            </div>
+            <p class="hint" id="loaderStatus">Fabric / Quilt 直接下载；Forge / NeoForge 会调用 Java 运行官方安装器</p>
           </div>
 
           <div class="toolbar">
@@ -384,7 +407,7 @@
             <div class="card about-card">
               <div class="card-head">
                 <h2>关于 SMUCL</h2>
-                <span class="chip" id="aboutVersion">v1.3.1</span>
+                <span class="chip" id="aboutVersion">v1.4.0</span>
               </div>
               <div class="about-body">
                 <img class="pixel" src="../assets/logo-mc-128.png" alt="" />

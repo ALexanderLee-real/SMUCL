@@ -1213,3 +1213,25 @@ html[data-theme="light"] .save-group-head b.save-group-ver {
   font-size: 11.5px; line-height: 1.7; color: #d8b268;
 }
 html[data-theme="light"] .pack-warn { color: #8a5d05; }
+
+/* =========================================================
+   模组加载器安装卡
+   ========================================================= */
+.loader-card { margin-bottom: 18px; }
+.loader-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.loader-row .segmented { flex: 0 0 auto; }
+.loader-row .seg { height: 30px; padding: 0 12px; font-size: 12px; }
+.loader-select { width: 168px; }
+.loader-select select { height: 34px; font-size: 12.5px; }
+.loader-row .btn-sm { height: 34px; }
+.btn-sm.primary {
+  background: var(--brand-2); color: #0b1220; border-color: transparent; font-weight: 600;
+}
+.btn-sm.primary:hover { filter: brightness(1.08); }
+.btn-sm.primary:disabled { opacity: 0.55; cursor: default; filter: none; }
+#loaderStatus { margin-top: 10px; }
+#loaderStatus.busy { color: var(--brand-2); }
+#loaderStatus.err { color: #e06666; }
+.loader-card .hint { font-size: 11.5px; line-height: 1.6; }

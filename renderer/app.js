@@ -457,6 +457,118 @@ function renderDirs() {
     .join('');
 }
 
+/* ---------------------------------------------------------------- 模组加载器 */
+const LOADER_LABEL = { fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge', neoforge: 'NeoForge' };
+S.loaderPick = { loader: 'fabric' };
+
+function compareMc(a, b) {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pb[i] || 0) - (pa[i] || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+/** 已装实例里出现过哪些「原版版本」——加载器必须装在这些底座上 */
+function baseVersions() {
+  const set = new Set();
+  for (const v of S.installed || []) {
+    const base = v.inheritsFrom || v.id;
+    if (/^\d+\.\d+(\.\d+)?$/.test(base)) set.add(base);
+  }
+  return Array.from(set).sort(compareMc);
+}
+
+function setLoaderStatus(text, cls) {
+  const el = $('#loaderStatus');
+  if (!el) return;
+  el.textContent = text;
+  el.className = `hint${cls ? ' ' + cls : ''}`;
+}
+
+function renderLoaderCard() {
+  const mcSel = $('#loaderMc');
+  if (!mcSel) return;
+
+  // 优先用正式版清单；底座没装的话装加载器时会自动补上
+  const releases = ((S.manifest && S.manifest.versions) || []).filter((v) => v.type === 'release');
+  const keep = mcSel.value;
+
+  if (releases.length) {
+    mcSel.innerHTML = releases
+      .map((v) => `<option value="${esc(v.id)}" data-url="${esc(v.url || '')}">${esc(v.id)}</option>`)
+      .join('');
+    $('#loaderBaseHint').textContent = '底座缺失会自动补装';
+  } else {
+    const list = baseVersions();
+    mcSel.innerHTML = list.length
+      ? list.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('')
+      : '<option value="">（版本清单未加载）</option>';
+    $('#loaderBaseHint').textContent = list.length ? `${list.length} 个原版可选` : '等待版本清单';
+  }
+
+  if (keep && Array.from(mcSel.options).some((o) => o.value === keep)) mcSel.value = keep;
+
+  const ok = Boolean(mcSel.value);
+  $('#btnInstallLoader').disabled = !ok;
+  if (ok) loadLoaderVersions();
+  else {
+    setLoaderStatus('版本清单还没加载好，稍等或点「刷新列表」', 'err');
+    $('#loaderVer').innerHTML = '<option value="">—</option>';
+  }
+}
+
+async function loadLoaderVersions() {
+  const loader = S.loaderPick.loader;
+  const mc = $('#loaderMc').value;
+  const sel = $('#loaderVer');
+  if (!mc) return;
+
+  sel.innerHTML = '<option value="">加载中…</option>';
+  const r = await api.listLoaders(loader, mc);
+  if (!r.ok) {
+    sel.innerHTML = '<option value="">获取失败</option>';
+    setLoaderStatus(r.error, 'err');
+    return;
+  }
+  sel.innerHTML = r.data
+    .map((v) => `<option value="${esc(v.version)}">${esc(v.version)}${v.stable ? '' : '（beta）'}</option>`)
+    .join('');
+  setLoaderStatus(`${LOADER_LABEL[loader]} 共 ${r.data.length} 个版本可用，最新 ${r.data[0].version}`, '');
+}
+
+async function installLoader() {
+  const loader = S.loaderPick.loader;
+  const mcSel = $('#loaderMc');
+  const mc = mcSel.value;
+  const mcUrl = mcSel.selectedOptions[0] ? mcSel.selectedOptions[0].dataset.url || '' : '';
+  const ver = $('#loaderVer').value;
+  const btn = $('#btnInstallLoader');
+  if (!mc || !ver) {
+    setLoaderStatus('请先选择游戏版本和加载器版本', 'err');
+    return;
+  }
+
+  btn.disabled = true;
+  setLoaderStatus(`准备安装 ${LOADER_LABEL[loader]} ${ver}…`, 'busy');
+  try {
+    const r = await api.installLoader(loader, mc, ver, mcUrl);
+    if (!r.ok) {
+      setLoaderStatus(r.error, 'err');
+      toast(r.error, 'err');
+      return;
+    }
+    setLoaderStatus(`已安装 ${r.data.id}`, '');
+    toast(`${r.data.label} ${ver} 安装完成`, 'ok');
+    await refreshInstalledAndRender();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+
 /* ---------------------------------------------------------------- 整合包导入 */
 const PACK_KIND_LABEL = {
   launcher: '启动器导出的整包',
@@ -961,6 +1073,7 @@ async function refreshInstalledAndRender() {
     S.sizesDone = false;
     renderAll();
     renderDownloadList();
+    renderLoaderCard();
   }
 }
 
@@ -998,6 +1111,7 @@ async function loadManifest(force = false) {
     toast(r.error, 'err');
   }
   renderDownloadList();
+  renderLoaderCard();
 }
 
 async function loadSaves({ quiet = false } = {}) {
@@ -1199,6 +1313,18 @@ function bindEvents() {
 
   $('#btnRefreshInstalled').onclick = refreshInstalledAndRender;
   $('#btnImportPack').onclick = importPackFlow;
+
+  // 模组加载器
+  $$('#loaderSwitch .seg').forEach((b) => {
+    b.onclick = () => {
+      if (S.loaderPick.loader === b.dataset.loader) return;
+      S.loaderPick.loader = b.dataset.loader;
+      $$('#loaderSwitch .seg').forEach((x) => x.classList.toggle('active', x === b));
+      loadLoaderVersions();
+    };
+  });
+  $('#loaderMc').onchange = loadLoaderVersions;
+  $('#btnInstallLoader').onclick = installLoader;
 
   // 版本卡动作
   $('#versionGrid').addEventListener('click', async (e) => {
@@ -1458,6 +1584,7 @@ async function boot() {
 
   // 主题尽早应用，避免首帧闪一下
   applyTheme(S.settings.theme || 'auto');
+  renderLoaderCard();
 
   const info = await api.appInfo();
   if (info.ok) {
@@ -1477,6 +1604,23 @@ async function boot() {
       renderSettings();
       renderJavaSummary();
     }
+  });
+
+  api.onLoader((p) => {
+    if (!p) return;
+    if (p.stage === 'error') {
+      setLoaderStatus(p.message || '安装失败', 'err');
+      return;
+    }
+    if (p.stage === 'libs') {
+      setLoaderStatus(`下载依赖库 ${p.done}/${p.total}…`, 'busy');
+      return;
+    }
+    if (p.stage === 'done') {
+      setLoaderStatus(p.message || '安装完成', '');
+      return;
+    }
+    if (p.message) setLoaderStatus(p.message, 'busy');
   });
 
   api.onInstall((p) => {

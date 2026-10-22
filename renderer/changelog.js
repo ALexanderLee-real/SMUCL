@@ -5,6 +5,18 @@
  */
 window.CHANGELOG = [
   {
+    version: '1.4.0',
+    date: '2026-10-23',
+    title: '在线安装模组加载器',
+    items: [
+      '下载页新增「安装模组加载器」：Fabric / Quilt / Forge / NeoForge 四选一',
+      'Fabric、Quilt 直接拉官方 meta 的版本 JSON 并下载依赖库，不需要 Java',
+      'Forge、NeoForge 下载官方安装器并调用本机 Java 执行，自动重建版本目录',
+      '原版底座没装时会先自动补装，装完直接能在版本列表里启动',
+      '镜像 / 官方双源可选：NeoForge 官方域名在部分网络会被 DNS 污染，默认走镜像',
+    ],
+  },
+  {
     version: '1.3.1',
     date: '2026-10-23',
     title: '修两处扎手的小问题',
