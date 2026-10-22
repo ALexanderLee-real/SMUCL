@@ -138,7 +138,7 @@ function build(id, options = {}) {
     '${classpath_separator}': path.delimiter,
     '${classpath}': classpath,
     '${launcher_name}': 'SMUCL',
-    '${launcher_version}': '1.2.3',
+    '${launcher_version}': '1.3.0',
     '${user_properties}': '{}',
     '${resolution_width}': String((options.resolution && options.resolution.width) || 925),
     '${resolution_height}': String((options.resolution && options.resolution.height) || 530),

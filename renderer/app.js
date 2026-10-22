@@ -457,6 +457,135 @@ function renderDirs() {
     .join('');
 }
 
+/* ---------------------------------------------------------------- 整合包导入 */
+const PACK_KIND_LABEL = {
+  launcher: '启动器导出的整包',
+  instance: '仅含 mods / config 的实例目录',
+  curseforge: 'CurseForge 清单包',
+  modrinth: 'Modrinth 清单包',
+  unknown: '无法识别的压缩包',
+};
+
+function packRow(label, value) {
+  if (!value) return '';
+  return `<div class="pack-row"><span>${esc(label)}</span><b>${esc(value)}</b></div>`;
+}
+
+async function importPackFlow(presetFile) {
+  let file = presetFile;
+  if (!file) {
+    const picked = await api.pickPack();
+    if (!picked.ok || !picked.data) return;
+    file = picked.data;
+  }
+
+  const info = await api.inspectPack(file);
+  if (!info.ok) {
+    toast(info.error, 'err');
+    return;
+  }
+
+  const target = S.settings.mcDir;
+  const size = fmtBytes(info.size || 0);
+
+  // 清单包（CurseForge / Modrinth）需要现场装加载器，当前版本做不到
+  if (info.kind === 'curseforge' || info.kind === 'modrinth') {
+    openModal({
+      title: '这个包需要在装加载器',
+      sub: PACK_KIND_LABEL[info.kind],
+      html: `<div class="pack-preview">
+        ${packRow('游戏版本', info.mcVersion)}
+        ${packRow('加载器', info.loader)}
+        ${packRow('模组数量', info.mods ? `${info.mods} 个` : '')}
+      </div>
+      <div style="margin-top:12px">这类包只有模组清单，不含版本文件，需要在线安装 ${
+        info.loader || '对应加载器'
+      } 才能启动。当前版本还没做加载器安装，建议先用 PCL 装一份，再导出整合包给 SMUCL 导入。</div>`,
+      buttons: [{ text: '知道了', primary: true }],
+    });
+    return;
+  }
+
+  if (info.kind === 'unknown') {
+    openModal({
+      title: '认不出这个压缩包',
+      sub: path_basename(file),
+      html: '<div>包里既没有 <code>versions/</code> 也没有 <code>mods/</code>，可能选错了文件。</div>',
+      buttons: [{ text: '知道了', primary: true }],
+    });
+    return;
+  }
+
+  openModal({
+    title: '导入整合包',
+    sub: info.name,
+    html: `<div class="pack-preview">
+      ${packRow('类型', PACK_KIND_LABEL[info.kind])}
+      ${packRow('游戏版本', info.mcVersion)}
+      ${packRow('加载器', info.loader)}
+      ${packRow('模组数量', info.mods ? `${info.mods} 个` : '')}
+      ${packRow('实例', info.instances ? info.instances.join('、') : '')}
+      ${packRow('压缩包', `${size} · ${info.files} 个文件`)}
+      ${packRow('导入到', target)}
+    </div>
+    <div style="margin-top:12px" class="pack-tip">同名实例会自动改名，不会覆盖你已有的版本。</div>`,
+    buttons: [
+      { text: '取消' },
+      { text: '开始导入', primary: true, onClick: () => runImport(file, target, info) },
+    ],
+  });
+}
+
+async function runImport(file, target, info) {
+  $('#modalBody').innerHTML = '<div class="pack-preview"><div class="pack-row"><span>正在解压并合并…</span><b>请稍候</b></div></div>';
+  $('#modalFoot').innerHTML = '';
+
+  const r = await api.importPack(file, target);
+  if (!r.ok) {
+    openModal({
+      title: '导入失败',
+      sub: path_basename(file),
+      html: `<div>${esc(r.error)}</div>`,
+      buttons: [{ text: '知道了', primary: true }],
+    });
+    return;
+  }
+
+  const d = r.data;
+  const verLines = d.versions
+    .map((v) => `<li><code>${esc(v.id)}</code>${v.renamed ? `（原名 ${esc(v.from)}，已重命名避免冲突）` : ''}</li>`)
+    .join('');
+
+  openModal({
+    title: '导入完成',
+    sub: `${d.versions.length} 个实例 · ${d.files} 个文件`,
+    html: `<div class="pack-preview">
+        ${verLines ? `<div class="pack-row"><span>新增实例</span><b>${d.versions.length} 个</b></div>` : ''}
+        ${d.dirs.length ? packRow('合并目录', d.dirs.slice(0, 8).join('、') + (d.dirs.length > 8 ? '…' : '')) : ''}
+      </div>
+      ${verLines ? `<ul class="pack-list">${verLines}</ul>` : ''}
+      ${d.warnings.length ? `<div class="pack-warn">${d.warnings.map((w) => `· ${esc(w)}`).join('<br>')}</div>` : ''}`,
+    buttons: [
+      {
+        text: '看看新实例',
+        primary: true,
+        onClick: async () => {
+          closeModal();
+          await refreshInstalledAndRender();
+          switchView('versions');
+        },
+      },
+    ],
+  });
+
+  refreshInstalledAndRender();
+}
+
+function path_basename(p) {
+  return String(p || '').split(/[\\/]/).pop();
+}
+
+
 /* ---------------------------------------------------------------- 显卡偏好 */
 async function applyGpuPreference(mode) {
   const el = $('#gpuPerfSwitch');
@@ -1051,6 +1180,7 @@ function bindEvents() {
   };
 
   $('#btnRefreshInstalled').onclick = refreshInstalledAndRender;
+  $('#btnImportPack').onclick = importPackFlow;
 
   // 版本卡动作
   $('#versionGrid').addEventListener('click', async (e) => {
@@ -1408,3 +1538,4 @@ async function boot() {
 }
 
 boot();
+

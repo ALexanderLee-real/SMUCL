@@ -13,6 +13,7 @@ const dirsLib = require('./core/dirs');
 const savesLib = require('./core/saves');
 const updater = require('./core/updater');
 const gpuLib = require('./core/gpu');
+const packLib = require('./core/pack');
 
 // Windows 上部分镜像的 AAAA 记录不可达，IPv6 优先会白等十几次超时
 try {
@@ -576,6 +577,38 @@ function registerIpc() {
       filters: [{ name: 'Java 可执行文件', extensions: ['exe'] }],
     });
     return { ok: true, data: res.canceled ? null : res.filePaths[0] };
+  });
+
+  // ---------------- 整合包导入 ----------------
+  ipcMain.handle('pack:pick', async () => {
+    const res = await dialog.showOpenDialog(win, {
+      properties: ['openFile'],
+      title: '选择整合包',
+      filters: [{ name: '整合包 / 压缩包', extensions: ['zip', 'mrpack'] }],
+    });
+    return { ok: true, data: res.canceled ? null : res.filePaths[0] };
+  });
+
+  ipcMain.handle('pack:inspect', async (_e, { file }) => {
+    try {
+      return packLib.inspect(file);
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('pack:import', async (_e, { file, targetDir }) => {
+    try {
+      const dir = targetDir || settingsLib.all().mcDir;
+      const r = await packLib.importPack({ zipPath: file, targetDir: dir });
+      if (r.ok) {
+        // 导入后重新扫一遍，让列表立刻出现新实例
+        await refreshJava().catch(() => {});
+      }
+      return r;
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   });
 
   ipcMain.handle('open:path', async (_e, { target }) => {

@@ -1161,3 +1161,43 @@ html[data-theme="light"] .save-group-head b.save-group-ver {
 /* 存档页工具栏里的分组切换 */
 #saveGroupSwitch { flex: 0 0 auto; padding: 2px; }
 #saveGroupSwitch .seg { padding: 0 11px; height: 26px; font-size: 12px; }
+
+/* =========================================================
+   整合包导入
+   ========================================================= */
+.pack-preview {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.pack-row {
+  display: flex; align-items: baseline; gap: 12px;
+  font-size: 12.5px;
+}
+.pack-row span { color: var(--dim); flex: 0 0 76px; }
+.pack-row b {
+  color: var(--txt); font-weight: 500;
+  font-family: var(--font-num);
+  word-break: break-all;
+}
+.pack-tip { font-size: 11.5px; color: var(--dim); }
+.pack-list {
+  list-style: none; margin-top: 10px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.pack-list li { font-size: 12px; color: var(--txt-2); position: relative; padding-left: 14px; }
+.pack-list li::before {
+  content: ""; position: absolute; left: 2px; top: 7px;
+  width: 4px; height: 4px; border-radius: 1px; background: var(--brand-2);
+}
+.pack-list code {
+  font-family: var(--font-num);
+  background: rgba(var(--ink), 0.08);
+  padding: 1px 6px; border-radius: 4px;
+}
+.pack-warn {
+  margin-top: 14px; padding: 10px 12px;
+  border-radius: 9px;
+  background: rgba(233, 182, 74, 0.10);
+  border: 1px solid rgba(233, 182, 74, 0.28);
+  font-size: 11.5px; line-height: 1.7; color: #d8b268;
+}
+html[data-theme="light"] .pack-warn { color: #8a5d05; }
