@@ -14,3 +14,7 @@ build/test-*.png
 Thumbs.db
 desktop.ini
 *.bak
+
+# Logo 设计草稿（本地保留，不入库）
+build/logo-concepts/
+build/_src-emblem.png

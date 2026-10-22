@@ -9,7 +9,7 @@
 [![Electron](https://img.shields.io/badge/Electron-45-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white)](#)
 [![License](https://img.shields.io/badge/license-MIT-3DA639)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.2.0-3b7dd8](#)
+[![Version](https://img.shields.io/badge/version-1.2.1-3b7dd8](#)
 [![Release](https://img.shields.io/github/v/release/Survaetr/SMUCL?label=release&color=3DA639)](https://github.com/Survaetr/SMUCL/releases)
 
 </div>
@@ -138,6 +138,12 @@ SMUCL/
 → 把 `dist/app-<version>.zip` 上传到对应 Release。
 
 ## 更新记录
+
+**v1.2.1**
+
+- 重新设计图标：木质船舵作外轮廓，校徽圆章成为轮毂中心，保留 1909
+- 校徽不再是照片下采样，改为像素手绘的帆船与波浪，小尺寸也能认出
+- 同步更新窗口图标、关于页与标题栏 Logo
 
 **v1.2.0**
 
