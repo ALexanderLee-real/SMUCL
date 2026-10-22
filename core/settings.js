@@ -27,6 +27,8 @@ const DEFAULTS = {
   theme: 'auto', // auto | dark | light
   autoUpdateCheck: true, // 启动时检查 GitHub 是否有新版本
   lastSeenVersion: '', // 用于判断是否需要弹出更新日志
+  gpuHighPerf: false, // 已把 javaw.exe 写入 Windows「高性能显卡」偏好
+  saveGroup: 'folder', // 存档分组：folder | version | time
 };
 
 let configPath = null;

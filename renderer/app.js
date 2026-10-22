@@ -457,6 +457,43 @@ function renderDirs() {
     .join('');
 }
 
+/* ---------------------------------------------------------------- 显卡偏好 */
+async function applyGpuPreference(mode) {
+  const el = $('#gpuPerfSwitch');
+  el.disabled = true;
+  try {
+    const r = await api.applyGpuAll(mode);
+    if (!r.ok) {
+      toast(r.error, 'err');
+      return false;
+    }
+    const d = r.data;
+    const okCount = d.applied.length;
+    const failCount = d.failed.length;
+    const label = mode === 'auto' ? '自动选择' : '高性能';
+
+    if (!okCount && !failCount) {
+      toast('没有找到可用的 Java，请先点「重新扫描」或手动指定 javaw.exe', 'warn');
+      return false;
+    }
+    if (!failCount) {
+      toast(`已为 ${okCount} 个 Java 设置「${label}」，覆盖 ${d.count} 个版本`, 'ok');
+      return true;
+    }
+    openModal({
+      title: '显卡偏好设置结果',
+      sub: `${label} · 成功 ${okCount} 个，失败 ${failCount} 个`,
+      html: `<div>${d.failed
+        .map((f) => `<p style="margin-bottom:8px"><code>${esc(f.exe)}</code><br>${esc(f.error || '写入失败')}</p>`)
+        .join('')}</div>`,
+      buttons: [{ text: '知道了', primary: true }],
+    });
+    return okCount > 0;
+  } finally {
+    el.disabled = false;
+  }
+}
+
 function renderSettings() {
   const s = S.settings;
 
@@ -488,21 +525,33 @@ function renderSettings() {
   $('#javaPathInput').value = s.javaPath || '';
   $('#mcDirInput').value = s.mcDir || '';
 
-  const memGB = (m) => `${(m / 1024).toFixed(1).replace('.0', '')} GB`;
-  const maxMem = Math.min(16384, Math.max(2048, Math.floor(S.memoryTotal / 1024) * 1024));
+  // 256 MB 一档（0.25 GB），显示不出现 3.7 这种怪值
+  const MEM_STEP = 256;
+  const memGB = (m) => {
+    const gb = m / 1024;
+    return `${Number.isInteger(gb) ? gb : gb.toFixed(2).replace(/0$/, '')} GB`;
+  };
+  // 上限：物理内存的 75%，但不超过 16 GB；低配机至少留 2 GB 可用
+  const capByRam = Math.floor((S.memoryTotal * 0.75) / MEM_STEP) * MEM_STEP;
+  const maxMem = Math.max(2048, Math.min(16384, capByRam));
+  const memVal = Math.min(maxMem, Math.max(1024, Math.round(s.memory / MEM_STEP) * MEM_STEP));
   [$('#memory'), $('#memory2')].forEach((el) => {
     el.max = String(maxMem);
-    el.value = String(Math.min(s.memory, maxMem));
+    el.step = String(MEM_STEP);
+    el.value = String(memVal);
   });
-  $('#memLabel').textContent = memGB(s.memory);
-  $('#memLabel2').textContent = memGB(s.memory);
-  $('#memHint').textContent = `物理内存 ${(S.memoryTotal / 1024).toFixed(0)} GB，建议分配 4~8 GB，不超过一半。`;
+  $('#memLabel').textContent = memGB(memVal);
+  $('#memLabel2').textContent = memGB(memVal);
+  $('#memHint').textContent =
+    `物理内存 ${(S.memoryTotal / 1024).toFixed(0)} GB，建议分配 4~8 GB，不超过一半；` +
+    `上限 ${memGB(maxMem)}（物理内存的 75%）。`;
 
   $('#jvmArgs').value = s.jvmArgs || '';
   $('#fullscreenSwitch').checked = Boolean(s.fullscreen);
   $('#showLogSwitch').checked = s.showLog !== false;
   $('#autoCheckSwitch').checked = s.autoCheck !== false;
   $('#gpuFallbackSwitch').checked = Boolean(s.gpuFallback);
+  $('#gpuPerfSwitch').checked = Boolean(s.gpuHighPerf);
   $('#threads').value = String(s.downloadThreads || 8);
   $('#threadLabel').textContent = String(s.downloadThreads || 8);
 
@@ -618,39 +667,19 @@ function updateInstallRow(p) {
 }
 
 /* ---------------------------------------------------------------- 存档 */
-function renderSaves() {
-  const list = $('#saveList');
-  const empty = $('#savesEmpty');
-  const saves = S.saves || [];
-
-  const totalSize = saves.reduce((n, s) => n + (s.size || 0), 0);
-  const dirs = new Set(saves.map((s) => s.dir));
-  $('#sumCount').textContent = `${saves.length} 个`;
-  $('#sumSize').textContent = fmtBytes(totalSize);
-  $('#sumDirs').textContent = `${dirs.size} 个`;
-  $('#navSaveCount').textContent = String(saves.length);
-
-  if (!saves.length) {
-    list.innerHTML = '';
-    empty.hidden = false;
-    return;
-  }
-  empty.hidden = true;
-
-  list.innerHTML = saves
-    .map((s) => {
-      const icon = s.icon
-        ? `<img src="${s.icon}" alt="" />`
-        : `<svg viewBox="0 0 24 24"><path d="M4 7.5 12 4l8 3.5v9L12 20l-8-3.5z"/><path d="M4 7.5 12 11l8-3.5"/><path d="M12 11v9"/></svg>`;
-      const tags = [
-        s.hardcore ? '<span class="chip chip-gold">硬核</span>' : '',
-        s.wasModded ? '<span class="chip">模组世界</span>' : '',
-        s.broken ? '<span class="chip chip-gold">无法读取</span>' : '',
-      ]
-        .filter(Boolean)
-        .join('');
-      const where = s.instanceId ? `实例 ${s.instanceId}` : '全局存档';
-      return `
+function saveCardHtml(s) {
+  const icon = s.icon
+    ? `<img src="${s.icon}" alt="" />`
+    : `<svg viewBox="0 0 24 24"><path d="M4 7.5 12 4l8 3.5v9L12 20l-8-3.5z"/><path d="M4 7.5 12 11l8-3.5"/><path d="M12 11v9"/></svg>`;
+  const tags = [
+    s.hardcore ? '<span class="chip chip-gold">硬核</span>' : '',
+    s.wasModded ? '<span class="chip">模组世界</span>' : '',
+    s.broken ? '<span class="chip chip-gold">无法读取</span>' : '',
+  ]
+    .filter(Boolean)
+    .join('');
+  const where = s.instanceId ? `实例 ${s.instanceId}` : '全局存档';
+  return `
       <div class="save-card" data-path="${esc(s.path)}">
         <div class="save-icon ${s.icon ? '' : 'fallback'}">${icon}</div>
         <div class="save-body">
@@ -663,8 +692,110 @@ function renderSaves() {
           <button class="btn-sm btn-danger" data-act="trash">删除</button>
         </div>
       </div>`;
-    })
+}
+
+/** 版本号降序：数字段逐段比，非数字（快照）退回字符串比较，未知版本垫底 */
+function compareVersionDesc(a, b) {
+  if (!a || !b) return a ? -1 : b ? 1 : 0;
+  const pa = String(a).split(/[^0-9]+/).filter(Boolean).map(Number);
+  const pb = String(b).split(/[^0-9]+/).filter(Boolean).map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pb[i] || 0) - (pa[i] || 0);
+    if (d) return d;
+  }
+  return String(b).localeCompare(String(a));
+}
+
+function groupBy(list, keyFn) {
+  const map = new Map();
+  for (const item of list) {
+    const k = keyFn(item);
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(item);
+  }
+  return map;
+}
+
+/** 按实例（文件夹）分组：组头显示实例名、所在目录与数量 */
+function renderSavesByPack(saves) {
+  const packs = groupBy(saves, (s) => s.instanceId || '__global__');
+  const list = Array.from(packs.entries()).map(([id, items]) => ({
+    id,
+    name: id === '__global__' ? '全局存档（不属于任何实例）' : id,
+    dir: items[0].dir || '',
+    items: items.slice().sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0)),
+    global: id === '__global__',
+  }));
+  list.sort((a, b) => (a.global !== b.global ? (a.global ? 1 : -1) : a.name.localeCompare(b.name, 'zh-CN')));
+
+  return list
+    .map(
+      (g) => `
+      <section class="save-group">
+        <div class="save-group-head">
+          <b>${esc(g.name)}</b>
+          <span class="save-group-path" title="${esc(g.dir)}">${esc(g.dir)}</span>
+          <em>${g.items.length} 个存档</em>
+        </div>
+        <div class="save-list">${g.items.map(saveCardHtml).join('')}</div>
+      </section>`
+    )
     .join('');
+}
+
+/** 按游戏版本分组 */
+function renderSavesByVersion(saves) {
+  const groups = Array.from(groupBy(saves, (s) => s.version || '未知版本').entries());
+  groups.sort((a, b) => compareVersionDesc(a[0], b[0]));
+
+  return groups
+    .map(
+      ([ver, items]) => `
+      <section class="save-group">
+        <div class="save-group-head">
+          <b class="save-group-ver">${esc(ver)}</b>
+          <em>${items.length} 个存档</em>
+        </div>
+        <div class="save-list">${items.map(saveCardHtml).join('')}</div>
+      </section>`
+    )
+    .join('');
+}
+
+/** 按最后游玩时间平铺 */
+function renderSavesByTime(saves) {
+  const sorted = saves.slice().sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0));
+  return `<div class="save-list">${sorted.map(saveCardHtml).join('')}</div>`;
+}
+
+function renderSaves() {
+  const list = $('#saveList');
+  const empty = $('#savesEmpty');
+  const saves = S.saves || [];
+  const mode = S.settings.saveGroup || 'folder';
+
+  const totalSize = saves.reduce((n, s) => n + (s.size || 0), 0);
+  const dirs = new Set(saves.map((s) => s.dir));
+  $('#sumCount').textContent = `${saves.length} 个`;
+  $('#sumSize').textContent = fmtBytes(totalSize);
+  $('#sumDirs').textContent = `${dirs.size} 个`;
+  $('#navSaveCount').textContent = String(saves.length);
+
+  $$('#saveGroupSwitch .seg').forEach((b) => b.classList.toggle('active', b.dataset.group === mode));
+
+  if (!saves.length) {
+    list.innerHTML = '';
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+
+  list.innerHTML =
+    mode === 'version'
+      ? renderSavesByVersion(saves)
+      : mode === 'time'
+        ? renderSavesByTime(saves)
+        : renderSavesByPack(saves);
 }
 
 function setSavesLoading(loading, text) {
@@ -1038,6 +1169,25 @@ function bindEvents() {
     api.save({ gpuFallback: e.target.checked });
     toast('设置已保存，重启启动器后生效');
   };
+
+  $('#gpuPerfSwitch').onchange = async (e) => {
+    const on = e.target.checked;
+    const ok = await applyGpuPreference(on ? 'high' : 'auto');
+    if (!ok) {
+      e.target.checked = !on;
+      return;
+    }
+    api.save({ gpuHighPerf: on });
+  };
+
+  $$('#saveGroupSwitch .seg').forEach((b) => {
+    b.onclick = () => {
+      if (S.settings.saveGroup === b.dataset.group) return;
+      S.settings.saveGroup = b.dataset.group;
+      api.save({ saveGroup: b.dataset.group });
+      renderSaves();
+    };
+  });
 
   $('#btnPickMcDir').onclick = async () => {
     const r = await api.pickDir();

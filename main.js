@@ -12,6 +12,7 @@ const launcher = require('./core/launch');
 const dirsLib = require('./core/dirs');
 const savesLib = require('./core/saves');
 const updater = require('./core/updater');
+const gpuLib = require('./core/gpu');
 
 // Windows 上部分镜像的 AAAA 记录不可达，IPv6 优先会白等十几次超时
 try {
@@ -525,6 +526,40 @@ function registerIpc() {
       electron: process.versions.electron,
     },
   }));
+
+  // ---------------- 显卡偏好 ----------------
+  // 把每个实例实际会用到的 javaw.exe 写进 Windows 图形设置，让 MC 走独立显卡。
+  ipcMain.handle('gpu:applyAll', async (_e, { mode = 'high' } = {}) => {
+    if (!gpuLib.supported()) return { ok: false, error: '该功能仅支持 Windows' };
+    if (!(mode in gpuLib.MODES)) return { ok: false, error: `未知的显卡模式：${mode}` };
+    try {
+      if (!javaCache.length) await refreshJava().catch(() => {});
+      const settings = settingsLib.all();
+      const installed = versionLib.listInstalled(getDirs());
+      const exePaths = [];
+      const versions = [];
+
+      for (const v of installed) {
+        // listInstalled 已经把 javaVersion.majorVersion 读出来了，不必再解析一遍 JSON
+        const required = v.javaMajor || 8;
+        const preferred = settings.javaPath
+          ? javaCache.find((j) => j.java === settings.javaPath || j.path === settings.javaPath)
+          : null;
+        const picked = preferred || javaLib.pick(javaCache, required);
+        if (!picked) continue;
+        exePaths.push(picked.path);
+        versions.push({ id: v.id, java: picked.path, required, actual: picked.major });
+      }
+
+      // 没有实例时，至少把手动指定的 Java 也写进去
+      if (settings.javaPath) exePaths.push(settings.javaPath);
+
+      const result = await gpuLib.applyAll(exePaths, mode);
+      return { ok: true, data: { ...result, versions, count: versions.length } };
+    } catch (e) {
+      return { ok: false, error: gpuLib.friendly(e) };
+    }
+  });
 
   ipcMain.handle('dialog:pickDir', async () => {
     const res = await dialog.showOpenDialog(win, {

@@ -82,7 +82,7 @@
             <span class="badge-offline">本地</span>
           </div>
           <button class="update-pill" id="updatePill" hidden>发现新版本</button>
-          <div class="side-hint">SMUCL v1.2.2 · 基于 Electron</div>
+          <div class="side-hint">SMUCL v1.2.3 · 基于 Electron</div>
         </div>
       </aside>
 
@@ -171,7 +171,7 @@
               </div>
 
               <div class="card notice-card">
-                <div class="card-head"><h2>公告</h2><span class="chip">v1.2.2</span></div>
+                <div class="card-head"><h2>公告</h2><span class="chip">v1.2.3</span></div>
                 <ul class="notice-list">
                   <li>
                     <b>镜像加速已开启</b>
@@ -255,6 +255,11 @@
               <p>汇总所有游戏目录与实例内的世界存档，读取 level.dat 展示版本与进度。</p>
             </div>
             <div class="head-actions">
+              <div class="segmented" id="saveGroupSwitch">
+                <button class="seg active" data-group="folder">按文件夹</button>
+                <button class="seg" data-group="version">按版本</button>
+                <button class="seg" data-group="time">按时间</button>
+              </div>
               <button class="btn-sm" id="btnRefreshSaves">重新扫描</button>
               <button class="btn-sm" id="btnOpenPrimarySaves">打开主目录 saves</button>
             </div>
@@ -269,7 +274,7 @@
             </div>
           </div>
 
-          <div class="save-list" id="saveList"></div>
+          <div class="save-groups" id="saveList"></div>
           <div class="empty" id="savesEmpty" hidden>
             <img class="pixel" src="../assets/logo-mc-128.png" alt="" />
             <b>没有找到存档</b>
@@ -323,6 +328,10 @@
                 <div><b>GPU 兼容模式</b><span>沙箱或显卡驱动导致启动崩溃时自动开启，手动改动需重启</span></div>
                 <label class="switch"><input type="checkbox" id="gpuFallbackSwitch" /><i></i></label>
               </div>
+              <div class="switch-row">
+                <div><b>使用高性能显卡</b><span>把每个版本用到的 javaw.exe 写进 Windows 图形设置，双显卡笔记本避免误走核显</span></div>
+                <label class="switch"><input type="checkbox" id="gpuPerfSwitch" /><i></i></label>
+              </div>
             </div>
 
             <div class="card">
@@ -374,7 +383,7 @@
             <div class="card about-card">
               <div class="card-head">
                 <h2>关于 SMUCL</h2>
-                <span class="chip" id="aboutVersion">v1.2.2</span>
+                <span class="chip" id="aboutVersion">v1.2.3</span>
               </div>
               <div class="about-body">
                 <img class="pixel" src="../assets/logo-mc-128.png" alt="" />

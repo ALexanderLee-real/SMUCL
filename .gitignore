@@ -21,3 +21,7 @@ build/_src-emblem.png
 
 # 宣传片产物（体积大，不入库）
 build/promo/
+
+# 临时截图/诊断产物
+build/*.png
+build/*.jpg

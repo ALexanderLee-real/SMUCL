@@ -43,6 +43,9 @@ contextBridge.exposeInMainWorld('smucl', {
   checkUpdate: (opts) => ipcRenderer.invoke('update:check', opts || {}),
   installUpdate: (asset) => ipcRenderer.invoke('update:install', { asset }),
 
+  // 显卡偏好（Windows 图形设置）
+  applyGpuAll: (mode) => ipcRenderer.invoke('gpu:applyAll', { mode }),
+
   // 窗口
   win: {
     minimize: () => ipcRenderer.send('win:minimize'),
