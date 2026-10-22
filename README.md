@@ -132,9 +132,10 @@ SMUCL/
 
 ## 致谢
 
-- [SJMC Launcher](https://github.com/UNIkeEN/SJMCL)：信息架构与交互参考
+- [SJMC Launcher](https://github.com/UNIkeEN/SJMCL)：上海交通大学开源项目，本项目的界面分区与交互参考
 - [BMCLAPI](https://bmclapi.bangbang93.com/)：国内镜像加速
 - 版本元数据来自 Mojang Launcher Meta
+- [Electron](https://www.electronjs.org/) 与 [adm-zip](https://github.com/cthackers/adm-zip)：运行时与解压
 
 ## 许可
 
