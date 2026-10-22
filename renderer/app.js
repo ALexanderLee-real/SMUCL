@@ -23,7 +23,36 @@ const S = {
   updateDismissed: null,
   saves: null,
   savesLoading: false,
+  appInfo: null,
+  updateInfo: null,
+  updatePrompted: null,
 };
+
+/* ---------------------------------------------------------------- 主题 */
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+const THEME_ICON = {
+  // 当前深色 → 按钮展示太阳（点击切浅色）；当前浅色 → 展示月亮
+  sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M4.3 12H2.1M21.9 12h-2.2M6.5 6.5 4.9 4.9M19.1 19.1l-1.6-1.6M17.5 6.5l1.6-1.6M4.9 19.1l1.6-1.6"/>',
+  moon: '<path d="M20.5 14.2A8.6 8.6 0 0 1 9.8 3.5 8.6 8.6 0 1 0 20.5 14.2z"/>',
+};
+
+function resolveTheme(pref) {
+  if (pref === 'dark' || pref === 'light') return pref;
+  return darkQuery.matches ? 'dark' : 'light';
+}
+
+function applyTheme(pref) {
+  const theme = resolveTheme(pref);
+  document.documentElement.dataset.theme = theme;
+  const icon = $('#themeIcon');
+  if (icon) icon.innerHTML = theme === 'dark' ? THEME_ICON.sun : THEME_ICON.moon;
+  const btn = $('#btnTheme');
+  if (btn) btn.title = theme === 'dark' ? '切换到浅色主题' : '切换到深色主题';
+}
+
+darkQuery.addEventListener('change', () => {
+  if (S.settings && S.settings.theme === 'auto') applyTheme('auto');
+});
 
 const TYPE_LABEL = {
   release: '正式版',
@@ -123,6 +152,125 @@ async function copyText(text) {
     return ok;
   }
 }
+
+/* ---------------------------------------------------------------- 弹窗 */
+function openModal({ title, sub = '', html = '', buttons = [] }) {
+  $('#modalTitle').textContent = title;
+  $('#modalSub').textContent = sub;
+  $('#modalBody').innerHTML = html;
+  const foot = $('#modalFoot');
+  foot.innerHTML = '';
+  for (const b of buttons) {
+    const el = document.createElement('button');
+    el.className = b.primary ? 'btn-sm btn-primary' : 'btn-sm';
+    el.textContent = b.text;
+    el.onclick = b.onClick || closeModal;
+    foot.appendChild(el);
+  }
+  $('#modalMask').hidden = false;
+}
+
+function closeModal() {
+  $('#modalMask').hidden = true;
+}
+
+/* ---------------------------------------------------------------- 更新 */
+async function checkUpdate(silent = true) {
+  if (!silent) toast('正在检查更新…');
+  const r = await api.checkUpdate({ silent });
+  if (!r.ok) {
+    if (!silent) toast(r.error, 'err');
+    return;
+  }
+  S.updateInfo = r;
+  if (!r.hasUpdate) {
+    if (!silent) toast(`已是最新版本 v${r.current}`, 'ok');
+    return;
+  }
+  if (silent && S.updatePrompted === r.latest) return;
+  S.updatePrompted = r.latest;
+  showUpdateModal(r);
+}
+
+function showUpdateModal(info) {
+  const notes = (info.notes || '').trim();
+  const body = notes
+    ? `<div class="cl-title">${esc(info.name || 'v' + info.latest)}</div><div>${esc(notes)}</div>`
+    : `<div>发现新版本 v${esc(info.latest)}，当前 v${esc(info.current)}。更新包只包含应用代码，下载约 1 MB，完成后会自动重启。</div>`;
+
+  const buttons = [{ text: '稍后', onClick: closeModal }];
+  if (info.url) buttons.push({ text: '查看发布页', onClick: () => api.openUrl(info.url) });
+  if (info.asset) {
+    buttons.push({ text: '立即更新', primary: true, onClick: () => startUpdate(info) });
+  } else if (info.url) {
+    buttons.push({ text: '去下载', primary: true, onClick: () => api.openUrl(info.url) });
+  }
+
+  openModal({
+    title: `发现新版本 v${info.latest}`,
+    sub: `当前 v${info.current} · ${info.source === 'release' ? 'GitHub Release' : 'GitHub 标签'}`,
+    html: body,
+    buttons,
+  });
+}
+
+async function startUpdate(info) {
+  const body = $('#modalBody');
+  body.innerHTML = `
+    <div class="cl-title">正在下载更新包</div>
+    <div class="up-progress"><i style="width:0%"></i></div>
+    <div class="up-note" id="upNote">准备中…</div>`;
+  $('#modalFoot').innerHTML = '';
+
+  const r = await api.installUpdate(info.asset);
+  if (!r.ok) {
+    body.innerHTML = `<div class="cl-title">更新失败</div><div>${esc(r.error)}</div>
+      <div class="up-note">可前往发布页手动下载。</div>`;
+    const foot = $('#modalFoot');
+    const b1 = document.createElement('button');
+    b1.className = 'btn-sm';
+    b1.textContent = '关闭';
+    b1.onclick = closeModal;
+    const b2 = document.createElement('button');
+    b2.className = 'btn-sm btn-primary';
+    b2.textContent = '前往发布页';
+    b2.onclick = () => api.openUrl(info.url);
+    foot.append(b1, b2);
+  }
+  // 成功时主进程会在 1.2 秒后自动重启，这里只负责展示进度
+}
+
+function setUpdateProgress({ percent }) {
+  const bar = $('.up-progress i');
+  const note = $('#upNote');
+  if (bar) bar.style.width = `${percent || 0}%`;
+  if (note) note.textContent = percent >= 100 ? '下载完成，正在重启…' : `已下载 ${percent || 0}%`;
+}
+
+/* ---------------------------------------------------------------- 更新日志 */
+function showChangelog(version) {
+  const list = window.CHANGELOG || [];
+  if (!list.length) {
+    openModal({ title: '更新日志', sub: '', html: '<div>暂无记录。</div>', buttons: [{ text: '知道了', primary: true }] });
+    return;
+  }
+  const entries = version ? list.filter((e) => e.version === version) : list.slice(0, 2);
+  const html = entries
+    .map(
+      (e) => `
+      <div class="cl-title">v${esc(e.version)} · ${esc(e.title)}</div>
+      <ul>${e.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`
+    )
+    .join('<div style="height:14px"></div>');
+
+  openModal({
+    title: version ? `v${version} 更新内容` : '更新日志',
+    sub: version ? entries[0]?.date || '' : '最近两个版本',
+    html,
+    buttons: [{ text: '知道了', primary: true }],
+  });
+}
+
 
 /* ---------------------------------------------------------------- 视图 */
 let currentView = 'home';
@@ -332,6 +480,8 @@ function renderSettings() {
   $$('#sourceSwitch .seg, #sourceSwitch2 .seg').forEach((b) =>
     b.classList.toggle('active', b.dataset.source === s.downloadSource)
   );
+
+  $$('#themeSwitch .seg').forEach((b) => b.classList.toggle('active', b.dataset.theme === (s.theme || 'auto')));
 
   $('#playerName').value = s.playerName || 'Steve';
   $('#sidePlayer').textContent = s.playerName || 'Steve';
@@ -609,6 +759,37 @@ function bindEvents() {
   $('#btnMin').onclick = () => api.win.minimize();
   $('#btnMax').onclick = () => api.win.maximize();
   $('#btnClose').onclick = () => api.win.close();
+
+  // 主题：标题栏一键切换，设置页三态
+  $('#btnTheme').onclick = () => {
+    const cur = resolveTheme(S.settings.theme);
+    const next = cur === 'dark' ? 'light' : 'dark';
+    S.settings.theme = next;
+    applyTheme(next);
+    renderSettings();
+    api.save({ theme: next });
+  };
+  $$('#themeSwitch .seg').forEach((b) => {
+    b.onclick = () => {
+      S.settings.theme = b.dataset.theme;
+      applyTheme(b.dataset.theme);
+      renderSettings();
+      api.save({ theme: b.dataset.theme });
+    };
+  });
+
+  // 弹窗
+  $('#modalClose').onclick = closeModal;
+  $('#modalMask').addEventListener('click', (e) => {
+    if (e.target === $('#modalMask')) closeModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('#modalMask').hidden) closeModal();
+  });
+
+  // 应用更新
+  $('#btnCheckUpdate').onclick = () => checkUpdate(false);
+  $('#btnShowChangelog').onclick = () => showChangelog(S.appInfo ? S.appInfo.version : null);
 
   $$('[data-open]').forEach((b) => (b.onclick = () => api.openUrl(b.dataset.open)));
 
@@ -945,6 +1126,18 @@ async function boot() {
   S.latest = st.data.latest || null;
   S.memoryTotal = st.data.memoryTotal || 16384;
 
+  // 主题尽早应用，避免首帧闪一下
+  applyTheme(S.settings.theme || 'auto');
+
+  const info = await api.appInfo();
+  if (info.ok) {
+    S.appInfo = info.data;
+    $('#aboutVersion').textContent = `v${info.data.version}`;
+    $('#aboutVersionText').textContent = info.data.version;
+    const hint = $('.side-hint');
+    if (hint) hint.textContent = `SMUCL v${info.data.version} · Electron ${String(info.data.electron).split('.')[0]}`;
+  }
+
   renderAll();
 
   // Java 探测耗时较长，放在首屏之后异步补齐
@@ -994,6 +1187,32 @@ async function boot() {
   });
 
   api.onVersionSize(({ key, size }) => patchSize(key, size));
+
+  // 应用更新事件
+  api.onUpdateAvailable((info) => {
+    S.updateInfo = info;
+    if (S.updatePrompted === info.latest) return;
+    S.updatePrompted = info.latest;
+    showUpdateModal(info);
+  });
+  api.onUpdateProgress((p) => setUpdateProgress(p));
+  api.onUpdateFailed(() => {
+    /* 静默失败，避免打扰 */
+  });
+
+  // 升级后首次启动弹出更新日志
+  const curVersion = S.appInfo && S.appInfo.version;
+  if (curVersion && S.settings.lastSeenVersion !== curVersion) {
+    setTimeout(() => {
+      showChangelog(curVersion);
+      api.save({ lastSeenVersion: curVersion });
+    }, 800);
+  }
+
+  // 启动后自动检查自身更新
+  if (S.settings.autoUpdateCheck !== false) {
+    setTimeout(() => checkUpdate(true), 6000);
+  }
 
   if (!S.installed.length) {
     setTimeout(() => toast('未检测到已安装版本，可在「设置 → 游戏目录」中添加', 'warn'), 900);

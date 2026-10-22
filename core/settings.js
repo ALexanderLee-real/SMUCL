@@ -24,6 +24,9 @@ const DEFAULTS = {
   downloadThreads: 8,
   autoCheck: true, // 后台自动检查新版本
   gpuFallback: false, // GPU 进程崩溃后自动切换的兼容启动模式
+  theme: 'auto', // auto | dark | light
+  autoUpdateCheck: true, // 启动时检查 GitHub 是否有新版本
+  lastSeenVersion: '', // 用于判断是否需要弹出更新日志
 };
 
 let configPath = null;

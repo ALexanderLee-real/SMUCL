@@ -11,6 +11,7 @@ const installer = require('./core/install');
 const launcher = require('./core/launch');
 const dirsLib = require('./core/dirs');
 const savesLib = require('./core/saves');
+const updater = require('./core/updater');
 
 // Windows 上部分镜像的 AAAA 记录不可达，IPv6 优先会白等十几次超时
 try {
@@ -108,6 +109,11 @@ function createWindow() {
               `document.querySelector('[data-view="${view}"]')?.click(); true`
             );
             await new Promise((r) => setTimeout(r, 1600));
+          }
+          // 调试钩子：注入一段脚本后再截图，便于自动化验证交互
+          if (process.env.SMUCL_SHOT_JS) {
+            await win.webContents.executeJavaScript(process.env.SMUCL_SHOT_JS);
+            await new Promise((r) => setTimeout(r, 2500));
           }
           const img = await win.webContents.capturePage();
           const name = view ? `shot-${view}.png` : 'shot.png';
@@ -477,6 +483,48 @@ function registerIpc() {
     }
     return { ok: true, data: next };
   });
+
+  // ---------------- 应用自身的更新 ----------------
+  ipcMain.handle('update:check', async (_e, { silent = false } = {}) => {
+    const r = await updater.check();
+    if (r.ok && r.hasUpdate && win && !win.isDestroyed()) {
+      win.webContents.send('update:available', r);
+    } else if (!r.ok && !silent && win && !win.isDestroyed()) {
+      win.webContents.send('update:failed', r);
+    }
+    return r;
+  });
+
+  ipcMain.handle('update:install', async (_e, { asset }) => {
+    try {
+      if (win && !win.isDestroyed()) win.webContents.send('update:progress', { stage: 'download', percent: 0 });
+      await updater.install(asset, (received, total) => {
+        const percent = total ? Math.min(99, Math.round((received / total) * 100)) : 0;
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('update:progress', { stage: 'download', percent, received, total });
+        }
+      });
+      if (win && !win.isDestroyed()) win.webContents.send('update:progress', { stage: 'done', percent: 100 });
+      settingsLib.save({ lastSeenVersion: '', pendingUpdate: true });
+      setTimeout(() => {
+        app.relaunch();
+        app.exit(0);
+      }, 1200);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('app:info', async () => ({
+    ok: true,
+    data: {
+      version: app.getVersion(),
+      packaged: app.isPackaged,
+      repo: updater.REPO,
+      electron: process.versions.electron,
+    },
+  }));
 
   ipcMain.handle('dialog:pickDir', async () => {
     const res = await dialog.showOpenDialog(win, {

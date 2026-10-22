@@ -38,6 +38,11 @@ contextBridge.exposeInMainWorld('smucl', {
   openPath: (target) => ipcRenderer.invoke('open:path', { target }),
   openUrl: (url) => ipcRenderer.invoke('open:url', { url }),
 
+  // 应用自身更新
+  appInfo: () => ipcRenderer.invoke('app:info'),
+  checkUpdate: (opts) => ipcRenderer.invoke('update:check', opts || {}),
+  installUpdate: (asset) => ipcRenderer.invoke('update:install', { asset }),
+
   // 窗口
   win: {
     minimize: () => ipcRenderer.send('win:minimize'),
@@ -53,4 +58,7 @@ contextBridge.exposeInMainWorld('smucl', {
   onLatest: (cb) => on('manifest:latest', cb),
   onSavesProgress: (cb) => on('saves:progress', cb),
   onVersionSize: (cb) => on('versions:size', cb),
+  onUpdateAvailable: (cb) => on('update:available', cb),
+  onUpdateFailed: (cb) => on('update:failed', cb),
+  onUpdateProgress: (cb) => on('update:progress', cb),
 });

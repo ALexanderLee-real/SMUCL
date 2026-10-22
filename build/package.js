@@ -69,6 +69,20 @@ function main() {
   };
   fs.writeFileSync(pkgPath, JSON.stringify(slim, null, 2), 'utf8');
 
+  // 生成应用代码更新包：只含 resources/app 内容，供自动更新使用（约 1~2 MB）
+  try {
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip();
+    zip.addLocalFolder(appDir);
+    const zipName = `app-${pkg.version}.zip`;
+    const zipPath = path.join(DIST_ROOT, zipName);
+    if (fs.existsSync(zipPath)) fs.rmSync(zipPath, { force: true });
+    zip.writeZip(zipPath);
+    console.log(`更新包：dist/${zipName}（${(fs.statSync(zipPath).size / 1024 / 1024).toFixed(2)} MB）`);
+  } catch (e) {
+    console.log('更新包生成失败：', e.message);
+  }
+
   // 说明文件放在 exe 同级，双击文件夹就能看到
   const readme = path.join(ROOT, '使用说明.txt');
   if (fs.existsSync(readme)) {

@@ -17,6 +17,10 @@
       </div>
       <div class="tb-drag"></div>
       <div class="tb-actions">
+        <button class="theme-btn" id="btnTheme" title="切换主题">
+          <svg viewBox="0 0 24 24" id="themeIcon"><circle cx="12" cy="12" r="4.2" /><path d="M12 2.6v2.2M12 19.2v2.2M4.3 12H2.1M21.9 12h-2.2M6.5 6.5 4.9 4.9M19.1 19.1l-1.6-1.6M17.5 6.5l1.6-1.6M4.9 19.1l1.6-1.6" /></svg>
+        </button>
+        <span class="tb-sep"></span>
         <button class="win-btn" id="btnMin" title="最小化">
           <svg viewBox="0 0 12 12"><path d="M2 6h8" /></svg>
         </button>
@@ -77,7 +81,7 @@
             </div>
             <span class="badge-offline">本地</span>
           </div>
-          <div class="side-hint">SMUCL v1.1.0 · 基于 Electron</div>
+          <div class="side-hint">SMUCL v1.2.0 · 基于 Electron</div>
         </div>
       </aside>
 
@@ -166,7 +170,7 @@
               </div>
 
               <div class="card notice-card">
-                <div class="card-head"><h2>公告</h2><span class="chip">v1.1.0</span></div>
+                <div class="card-head"><h2>公告</h2><span class="chip">v1.2.0</span></div>
                 <ul class="notice-list">
                   <li>
                     <b>镜像加速已开启</b>
@@ -321,6 +325,19 @@
             </div>
 
             <div class="card">
+              <div class="card-head"><h2>外观</h2></div>
+              <div class="field">
+                <label>主题外观</label>
+                <div class="segmented wide" id="themeSwitch">
+                  <button class="seg" data-theme="auto">跟随系统</button>
+                  <button class="seg" data-theme="dark">深色</button>
+                  <button class="seg" data-theme="light">浅色</button>
+                </div>
+                <p class="hint">浅色主题会保留首页横幅与运行日志的深色底，避免像素 Logo 失效。</p>
+              </div>
+            </div>
+
+            <div class="card">
               <div class="card-head"><h2>下载与目录</h2></div>
               <div class="field">
                 <label>下载源</label>
@@ -354,15 +371,20 @@
             </div>
 
             <div class="card about-card">
-              <div class="card-head"><h2>关于 SMUCL</h2></div>
+              <div class="card-head">
+                <h2>关于 SMUCL</h2>
+                <span class="chip" id="aboutVersion">v1.2.0</span>
+              </div>
               <div class="about-body">
                 <img class="pixel" src="../assets/logo-mc-128.png" alt="" />
                 <div>
-                  <b>SMUCL 1.1.0</b>
+                  <b>SMUCL <span id="aboutVersionText">1.2.0</span></b>
                   <p>上海海事大学 Minecraft 启动器。界面参考 SJMC Launcher 的信息层级，采用 Minecraft 风格的像素与斜角视觉。</p>
                   <div class="about-links">
-                    <button class="ghost-link" data-open="https://mc.sjtu.cn/sjmcl">SJMC 官网</button>
-                    <button class="ghost-link" data-open="https://github.com/UNIkeEN/SJMCL">GitHub</button>
+                    <button class="ghost-link" id="btnCheckUpdate">检查更新</button>
+                    <button class="ghost-link" id="btnShowChangelog">更新日志</button>
+                    <button class="ghost-link" data-open="https://github.com/Survaetr/SMUCL">GitHub</button>
+                    <button class="ghost-link" data-open="https://mc.sjtu.cn/sjmcl">SJMC</button>
                   </div>
                 </div>
               </div>
@@ -392,6 +414,22 @@
     <div class="toasts" id="toasts"></div>
   </div>
 
+  <!-- ============ 通用弹窗（更新提示 / 更新日志） ============ -->
+  <div class="modal-mask" id="modalMask" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="modalTitle">发现新版本</h3>
+          <p id="modalSub"></p>
+        </div>
+        <button class="modal-x" id="modalClose" title="关闭">✕</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-foot" id="modalFoot"></div>
+    </div>
+  </div>
+
+  <script src="changelog.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
