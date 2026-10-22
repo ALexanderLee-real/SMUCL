@@ -9,7 +9,8 @@
 [![Electron](https://img.shields.io/badge/Electron-45-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white)](#)
 [![License](https://img.shields.io/badge/license-MIT-3DA639)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.0-3b7dd8](#)
+[![Version](https://img.shields.io/badge/version-1.2.0-3b7dd8](#)
+[![Release](https://img.shields.io/github/v/release/Survaetr/SMUCL?label=release&color=3DA639)](https://github.com/Survaetr/SMUCL/releases)
 
 </div>
 
@@ -31,6 +32,8 @@
 | 存档 | 扫描所有目录与实例的 `saves`，解析 `level.dat` 得到世界名、版本、模式、最后游玩，支持定位与移至回收站 |
 | 下载游戏 | 拉取 Mojang 版本清单，按正式版 / 快照 / 旧版筛选，逐行进度条安装；中断的实例显示「修复」 |
 | 设置 | Java 运行时扫描与指定、内存、JVM 参数、全屏、下载源、并发数、游戏目录管理、自动检查新版本 |
+| 主题 | 深色 / 浅色 / 跟随系统，标题栏右上角一键切换 |
+| 在线更新 | 检查本仓库 Release，下载 `app-<version>.zip` 增量更新包并自动重启；升级后首次启动弹出更新日志 |
 | 运行日志 | 底部抽屉，实时显示游戏 stdout / stderr，错误行高亮 |
 
 ### 截图
@@ -42,6 +45,10 @@
 | 下载游戏 | 设置 |
 | --- | --- |
 | ![下载](docs/screenshots/download.jpg) | ![设置](docs/screenshots/settings.jpg) |
+
+浅色主题（首页横幅与运行日志刻意保持深色，避免像素 Logo 失效）：
+
+![浅色主题](docs/screenshots/home-light.jpg)
 
 ## 快速开始
 
@@ -118,7 +125,27 @@ SMUCL/
 - 存档支持查看、定位、移至回收站，暂未提供打包备份与还原。
 - Windows 优先（依赖 `javaw.exe`、路径分隔符），macOS / Linux 需自行适配。
 
+## 在线更新
+
+应用只替换自身代码（`resources/app`，约 340 KB），不重下 Electron 运行时，因此更新包能直接挂在 Release 上：
+
+1. 启动 6 秒后请求 `releases/latest`，与本机版本号比对；
+2. 有新版本则弹窗展示 Release 说明，可一键更新；
+3. 下载 `app-<version>.zip` → 解压覆盖 `resources/app` → `app.relaunch()` 重启；
+4. 新版首次启动比对 `lastSeenVersion`，不一致则弹出更新日志。
+
+发版流程：改 `package.json` 版本 → 在 `renderer/changelog.js` 顶部加一条 → `node build/package.js`
+→ 把 `dist/app-<version>.zip` 上传到对应 Release。
+
 ## 更新记录
+
+**v1.2.0**
+
+- 新增深色 / 浅色 / 跟随系统三种主题，标题栏右上角可一键切换
+- 启动时检查 GitHub Release，可直接下载更新包并自动重启
+- 每次升级后首次启动弹出更新日志
+- 打包脚本额外产出 `dist/app-<version>.zip`（约 340 KB），用于增量更新
+- 浅色主题下重新调校状态标签、数值文字与标题栏 Logo 的对比度
 
 **v1.1.0**
 
