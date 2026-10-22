@@ -1,0 +1,141 @@
+<div align="center">
+
+<img src="assets/logo-mc-256.png" width="116" alt="SMUCL" />
+
+# SMUCL
+
+**上海海事大学 Minecraft 启动器** · Shanghai Maritime University Custom Launcher
+
+[![Electron](https://img.shields.io/badge/Electron-45-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white)](#)
+[![License](https://img.shields.io/badge/license-MIT-3DA639)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.1.0-3b7dd8](#)
+
+</div>
+
+界面综合了两款启动器的信息架构与交互习惯：**SJMC Launcher** 的分区清晰、以版本为中心的管理方式，
+以及常见国产启动器「一屏启动」的首页布局；视觉上做了 Minecraft 化处理——校徽被重构为像素图标，
+主按钮采用草方块绿的斜角浮雕，面板使用像素描边与内高光。
+
+![首页](docs/screenshots/home.jpg)
+
+> 本项目为个人学习作品，与 Mojang Studios、Microsoft 及上海海事大学官方均无关联。
+> 启动器仅在本地读写文件，不收集任何数据。
+
+## 功能
+
+| 模块 | 说明 |
+| --- | --- |
+| 首页 | 版本下拉、玩家名、内存滑块、一键启动；运行环境、公告与新版本提示条 |
+| 版本管理 | 跨目录汇总实例，显示加载器 / 模组数 / 是否版本隔离 / 占用空间，支持启动、打开目录、复制启动命令、删除 |
+| 存档 | 扫描所有目录与实例的 `saves`，解析 `level.dat` 得到世界名、版本、模式、最后游玩，支持定位与移至回收站 |
+| 下载游戏 | 拉取 Mojang 版本清单，按正式版 / 快照 / 旧版筛选，逐行进度条安装；中断的实例显示「修复」 |
+| 设置 | Java 运行时扫描与指定、内存、JVM 参数、全屏、下载源、并发数、游戏目录管理、自动检查新版本 |
+| 运行日志 | 底部抽屉，实时显示游戏 stdout / stderr，错误行高亮 |
+
+### 截图
+
+| 存档管理 | 版本管理 |
+| --- | --- |
+| ![存档](docs/screenshots/saves.jpg) | ![版本](docs/screenshots/versions.jpg) |
+
+| 下载游戏 | 设置 |
+| --- | --- |
+| ![下载](docs/screenshots/download.jpg) | ![设置](docs/screenshots/settings.jpg) |
+
+## 快速开始
+
+### 直接运行
+
+项目不提交构建产物，需在本地打包一次：
+
+```bash
+git clone <this-repo>
+cd SMUCL
+npm install
+node build/package.js
+```
+
+产物在 `dist/SMUCL-win32-x64/`，双击 `SMUCL.exe` 即可，整个目录可拷贝到任意位置运行。
+
+> 若 `npm install` 卡在 Electron 二进制下载，可先设置镜像：
+> `set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`
+
+### 开发模式
+
+```bash
+npm install
+npm start
+```
+
+Windows 上也可双击 `启动开发版.bat`（脚本会清空可能干扰 Electron 的 `ELECTRON_RUN_AS_NODE`
+与 `NODE_OPTIONS` 环境变量）。
+
+## 项目结构
+
+```
+SMUCL/
+├── main.js              主进程：窗口、IPC、安装与启动调度、版本轮询、GPU 兜底
+├── preload.js           contextBridge 暴露的受控 API
+├── core/
+│   ├── settings.js      配置读写
+│   ├── net.js           请求 / 下载 / 并发池
+│   ├── mirror.js        下载源重写（BMCLAPI ↔ 官方）
+│   ├── rules.js         版本 JSON 的 os / features 规则
+│   ├── java.js          Java 探测与版本匹配（跨目录）
+│   ├── dirs.js          启动器识别与游戏目录聚合
+│   ├── version.js       远端清单、多目录实例扫描、继承合并
+│   ├── saves.js         存档扫描与体积统计
+│   ├── nbt.js           level.dat 的 NBT 解析
+│   ├── install.js       客户端 / 依赖库 / 资源 / natives
+│   └── launch.js        启动参数构建（隔离目录 + natives 复用）与进程管理
+├── renderer/            index.html / styles.css / app.js（原生实现，无框架）
+├── assets/              像素化 Logo、wordmark、icon
+├── build/               打包、Logo 生成、自测脚本
+└── docs/screenshots/    README 用截图
+```
+
+## 实现要点
+
+- **多启动器目录发现**：解析桌面快捷方式定位启动器 exe，取其同级 `.minecraft`；已实测识别 PCL 便携版
+  （exe 与游戏目录不在 `%APPDATA%` 的常见布局）。首次启动若主目录为空会自动采用。
+- **版本隔离适配**：PCL / HMCL 的隔离实例把 `mods`、`config`、`saves` 放在 `versions/<id>/` 下，
+  启动时 `--gameDir` 与进程工作目录都指向实例目录，并优先复用 `<id>-natives` 里已解压的本地库。
+- **存档解析**：自实现 NBT 读取器（gzip + 全部 TAG 类型），只取需要的字段，不加载区块数据；
+  兼容 1.21.2+ 把难度改为 `difficulty_settings.difficulty` 字符串的新结构，并剥离 `§` 格式码。
+- **实时版本检查**：后台每 5 分钟拉取版本清单，最新正式版变化时推送界面并弹系统通知；
+  首页提示条可一键安装。可在设置中关闭。
+- **双源回退**：默认走 BMCLAPI 镜像，单文件失败自动换官方源重试；清单获取也做双源竞速。
+- **增量安装**：已存在且大小一致的文件直接跳过，重复安装不会重复下载。
+- **GPU 兼容兜底**：监听 `child-process-gone`，GPU 进程反复崩溃时写标记并带兼容参数自动重启，
+  避免在驱动异常或安全软件拦截沙箱的机器上直接闪退。
+
+## 已知限制
+
+- 仅支持**离线账户**，未接入 Microsoft 正版登录，无法进入正版验证服务器。
+- 下载页只列原版版本；Forge / Fabric / NeoForge 实例需先用对应安装器生成，本启动器负责运行。
+- 资源未做 SHA1 校验，仅按文件大小判断完整性。
+- 存档支持查看、定位、移至回收站，暂未提供打包备份与还原。
+- Windows 优先（依赖 `javaw.exe`、路径分隔符），macOS / Linux 需自行适配。
+
+## 更新记录
+
+**v1.1.0**
+
+- 新增「存档」页：NBT 解析世界名 / 版本 / 模式 / 最后游玩，展示世界真实图标
+- 新增多启动器目录发现与聚合，自动采用 PCL 便携版目录；设置页可增删目录、切换主目录
+- 适配版本隔离实例：`--gameDir` 指向实例目录，复用 `<id>-natives`
+- 新增后台版本轮询与首页更新提示条，可一键安装最新正式版
+- 新增 GPU 兼容兜底与开关
+
+**v1.0.0** 首个版本：安装、启动、版本管理、设置、日志。
+
+## 致谢
+
+- [SJMC Launcher](https://github.com/UNIkeEN/SJMCL)：信息架构与交互参考
+- [BMCLAPI](https://bmclapi.bangbang93.com/)：国内镜像加速
+- 版本元数据来自 Mojang Launcher Meta
+
+## 许可
+
+[MIT](LICENSE)

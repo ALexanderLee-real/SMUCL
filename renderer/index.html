@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+  <title>SMUCL — 上海海事大学 Minecraft 启动器</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- ============ 标题栏 ============ -->
+    <header class="titlebar">
+      <div class="tb-left">
+        <img class="tb-logo pixel" src="../assets/logo-mc-128.png" alt="" />
+        <img class="tb-word pixel" src="../assets/wordmark.png" alt="SMUCL" />
+        <span class="tb-tag">LAUNCHER</span>
+      </div>
+      <div class="tb-drag"></div>
+      <div class="tb-actions">
+        <button class="win-btn" id="btnMin" title="最小化">
+          <svg viewBox="0 0 12 12"><path d="M2 6h8" /></svg>
+        </button>
+        <button class="win-btn" id="btnMax" title="最大化">
+          <svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" rx="0.5" /></svg>
+        </button>
+        <button class="win-btn danger" id="btnClose" title="关闭">
+          <svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="body">
+      <!-- ============ 侧边栏 ============ -->
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-badge">
+            <img class="pixel" src="../assets/logo-mc-128.png" alt="SMUCL" />
+          </div>
+          <div class="brand-text">
+            <b>SMUCL</b>
+            <span>上海海事大学</span>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-item active" data-view="home">
+            <svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V21H3z" /><path d="M9 21v-7h6v7" /></svg>
+            <span>首页</span>
+          </button>
+          <button class="nav-item" data-view="versions">
+            <svg viewBox="0 0 24 24"><path d="M12 3 3 7.5 12 12l9-4.5z" /><path d="M3 12.5 12 17l9-4.5" /><path d="M3 17.5 12 22l9-4.5" /></svg>
+            <span>版本管理</span>
+            <em id="navVersionCount">0</em>
+          </button>
+          <button class="nav-item" data-view="download">
+            <svg viewBox="0 0 24 24"><path d="M12 3v11" /><path d="M7.5 10 12 14.5 16.5 10" /><path d="M4 19.5h16" /></svg>
+            <span>下载游戏</span>
+            <i class="nav-dot" id="navUpdateDot" hidden></i>
+          </button>
+          <button class="nav-item" data-view="saves">
+            <svg viewBox="0 0 24 24"><path d="M4 7.5 12 4l8 3.5v9L12 20l-8-3.5z" /><path d="M4 7.5 12 11l8-3.5" /><path d="M12 11v9" /></svg>
+            <span>存档</span>
+            <em id="navSaveCount">0</em>
+          </button>
+          <button class="nav-item" data-view="settings">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" /><path d="M12 2.8v2.6M12 18.6v2.6M4.5 12H2M22 12h-2.5M6.2 6.2 4.4 4.4M19.6 19.6l-1.8-1.8M17.8 6.2l1.8-1.8M4.4 19.6l1.8-1.8" /></svg>
+            <span>设置</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div class="player-card" id="playerCard">
+            <div class="avatar" id="avatar">S</div>
+            <div class="player-meta">
+              <b id="sidePlayer">Steve</b>
+              <span>离线账户</span>
+            </div>
+            <span class="badge-offline">本地</span>
+          </div>
+          <div class="side-hint">SMUCL v1.1.0 · 基于 Electron</div>
+        </div>
+      </aside>
+
+      <!-- ============ 内容区 ============ -->
+      <main class="content">
+        <!-- ---------- 首页 ---------- -->
+        <section class="view active" id="view-home">
+          <div class="hero">
+            <div class="hero-grid"></div>
+            <div class="hero-glow"></div>
+            <div class="hero-inner">
+              <div class="hero-text">
+                <div class="eyebrow"><i></i>上海海事大学 · Minecraft 启动器</div>
+                <img class="hero-word pixel" src="../assets/wordmark.png" alt="SMUCL" />
+                <p class="hero-sub">版本统一管理 · 一键安装 · 镜像加速下载</p>
+                <div class="hero-links">
+                  <button class="link-btn" data-open="https://mc.sjtu.cn/sjmcl">SJMC 官网</button>
+                  <button class="link-btn" data-open="https://github.com/UNIkeEN/SJMCL">SJMC 开源仓库</button>
+                </div>
+              </div>
+              <div class="hero-art">
+                <div class="hero-ring"></div>
+                <img class="hero-badge pixel" src="../assets/logo-mc.png" alt="SMUCL Logo" />
+              </div>
+            </div>
+          </div>
+
+          <div class="update-bar" id="updateBar" hidden>
+            <span class="update-dot"></span>
+            <div class="update-text">
+              <b>发现新版本 <span id="updateVersion"></span></b>
+              <small id="updateHint">官方已发布新的正式版，可一键安装</small>
+            </div>
+            <button class="btn-sm btn-primary" id="btnUpdateNow">立即安装</button>
+            <button class="btn-sm" id="btnUpdateDismiss">稍后</button>
+          </div>
+
+          <div class="home-grid">
+            <div class="card play-card">
+              <div class="card-head">
+                <h2>准备出发</h2>
+                <span class="chip chip-blue" id="playTypeChip">未选择</span>
+              </div>
+
+              <div class="field">
+                <label>游戏版本</label>
+                <div class="select-wrap">
+                  <select id="versionSelect"></select>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <div class="field">
+                  <label>玩家名</label>
+                  <input class="input" id="playerName" maxlength="16" placeholder="Steve" />
+                </div>
+                <div class="field">
+                  <label>内存分配 <b id="memLabel">4 GB</b></label>
+                  <input type="range" id="memory" min="1024" max="16384" step="512" />
+                </div>
+              </div>
+
+              <button class="mc-btn play" id="playBtn">
+                <span class="mc-btn-face">开 始 游 戏</span>
+              </button>
+
+              <div class="play-meta">
+                <span id="playMeta">尚未安装任何版本</span>
+                <button class="ghost-link" id="btnOpenGameDir">打开游戏目录</button>
+              </div>
+            </div>
+
+            <div class="side-col">
+              <div class="card status-card">
+                <div class="card-head"><h2>运行环境</h2></div>
+                <div class="kv"><span>Java</span><b id="kvJava">检测中…</b></div>
+                <div class="kv"><span>已装版本</span><b id="kvVersions">0</b></div>
+                <div class="kv"><span>最新正式版</span><b id="kvLatest">检查中…</b></div>
+                <div class="kv"><span>存档 / 模组</span><b id="kvSaves">—</b></div>
+                <div class="kv"><span>内存分配</span><b id="kvMemory">4 GB</b></div>
+                <div class="kv"><span>游戏目录</span><b class="ellipsis" id="kvDir">—</b></div>
+                <div class="status-actions">
+                  <button class="btn-sm" id="btnDetectJava">重新检测 Java</button>
+                  <button class="btn-sm" id="btnGoDownload">去下载版本</button>
+                </div>
+              </div>
+
+              <div class="card notice-card">
+                <div class="card-head"><h2>公告</h2><span class="chip">v1.1.0</span></div>
+                <ul class="notice-list">
+                  <li>
+                    <b>镜像加速已开启</b>
+                    <p>默认使用 BMCLAPI 镜像拉取版本与资源，国内下载更快；可在设置中切换回官方源。</p>
+                  </li>
+                  <li>
+                    <b>离线模式</b>
+                    <p>当前版本使用离线账户登录，玩家名可自定义，仅适用于本地与离线服务器。</p>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------- 版本管理 ---------- -->
+        <section class="view" id="view-versions">
+          <div class="view-head">
+            <div>
+              <h1>版本管理</h1>
+              <p>本地已安装的游戏实例，支持启动、复制启动命令与清理。</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn-sm" id="btnRefreshInstalled">刷新</button>
+              <button class="btn-sm" id="btnOpenVersionsDir">打开 versions 目录</button>
+            </div>
+          </div>
+          <div class="version-grid" id="versionGrid"></div>
+          <div class="empty" id="versionsEmpty" hidden>
+            <img class="pixel" src="../assets/logo-mc-128.png" alt="" />
+            <b>还没有安装任何版本</b>
+            <p>前往「下载游戏」选择一个版本开始安装。</p>
+            <button class="mc-btn small" id="btnEmptyGoDownload"><span class="mc-btn-face">去下载</span></button>
+          </div>
+        </section>
+
+        <!-- ---------- 下载 ---------- -->
+        <section class="view" id="view-download">
+          <div class="view-head">
+            <div>
+              <h1>下载游戏</h1>
+              <p>从 Mojang 版本仓库获取正式版、快照与远古版本。</p>
+            </div>
+            <div class="segmented" id="sourceSwitch">
+              <button class="seg active" data-source="bmcl">镜像加速</button>
+              <button class="seg" data-source="mojang">官方源</button>
+            </div>
+          </div>
+
+          <div class="check-strip">
+            <span class="check-dot"></span>
+            <span id="checkTime">正在检查最新版本…</span>
+            <span class="check-sep">·</span>
+            <span>后台每 5 分钟自动检查</span>
+          </div>
+
+          <div class="toolbar">
+            <div class="chips" id="typeFilter">
+              <button class="chip-btn active" data-type="all">全部</button>
+              <button class="chip-btn" data-type="release">正式版</button>
+              <button class="chip-btn" data-type="snapshot">快照</button>
+              <button class="chip-btn" data-type="old_beta">旧版 Beta</button>
+              <button class="chip-btn" data-type="old_alpha">旧版 Alpha</button>
+            </div>
+            <div class="toolbar-right">
+              <input class="input search" id="searchInput" placeholder="搜索版本号…" />
+              <button class="btn-sm" id="btnRefreshManifest">刷新列表</button>
+            </div>
+          </div>
+
+          <div class="dl-list" id="dlList">
+            <div class="dl-loading"><span class="spinner"></span>正在获取版本列表…</div>
+          </div>
+        </section>
+
+        <!-- ---------- 存档 ---------- -->
+        <section class="view" id="view-saves">
+          <div class="view-head">
+            <div>
+              <h1>存档</h1>
+              <p>汇总所有游戏目录与实例内的世界存档，读取 level.dat 展示版本与进度。</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn-sm" id="btnRefreshSaves">重新扫描</button>
+              <button class="btn-sm" id="btnOpenPrimarySaves">打开主目录 saves</button>
+            </div>
+          </div>
+
+          <div class="saves-summary" id="savesSummary">
+            <div class="sum-item"><span>存档数量</span><b id="sumCount">—</b></div>
+            <div class="sum-item"><span>占用空间</span><b id="sumSize">—</b></div>
+            <div class="sum-item"><span>来源目录</span><b id="sumDirs">—</b></div>
+            <div class="sum-progress" id="saveProgress" hidden>
+              <span class="spinner"></span><span id="saveProgressText">正在扫描…</span>
+            </div>
+          </div>
+
+          <div class="save-list" id="saveList"></div>
+          <div class="empty" id="savesEmpty" hidden>
+            <img class="pixel" src="../assets/logo-mc-128.png" alt="" />
+            <b>没有找到存档</b>
+            <p>存档通常位于 <code>.minecraft/saves</code> 或各实例目录下的 <code>saves</code>。</p>
+          </div>
+        </section>
+
+        <!-- ---------- 设置 ---------- -->
+        <section class="view" id="view-settings">
+          <div class="view-head">
+            <div>
+              <h1>设置</h1>
+              <p>调整 Java、内存与下载行为，设置会自动保存。</p>
+            </div>
+          </div>
+
+          <div class="settings-wrap">
+            <div class="card">
+              <div class="card-head"><h2>Java 运行时</h2><button class="btn-sm" id="btnRescanJava">重新扫描</button></div>
+              <p class="hint">游戏需要与版本匹配的 Java；1.17+ 需要 Java 17，1.20.5+ 建议 Java 21。</p>
+              <div class="java-list" id="javaList"></div>
+              <div class="field">
+                <label>手动指定 javaw.exe</label>
+                <div class="row">
+                  <input class="input" id="javaPathInput" placeholder="留空则自动选择" />
+                  <button class="btn-sm" id="btnPickJava">浏览…</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2>性能</h2></div>
+              <div class="field">
+                <label>内存分配 <b id="memLabel2">4 GB</b></label>
+                <input type="range" id="memory2" min="1024" max="16384" step="512" />
+                <p class="hint" id="memHint">建议不超过物理内存的一半。</p>
+              </div>
+              <div class="field">
+                <label>附加 JVM 参数</label>
+                <input class="input" id="jvmArgs" placeholder="例如：-XX:+UseG1GC" />
+              </div>
+              <div class="switch-row">
+                <div><b>全屏启动</b><span>启动时直接进入全屏</span></div>
+                <label class="switch"><input type="checkbox" id="fullscreenSwitch" /><i></i></label>
+              </div>
+              <div class="switch-row">
+                <div><b>启动后显示日志</b><span>自动展开运行日志面板</span></div>
+                <label class="switch"><input type="checkbox" id="showLogSwitch" /><i></i></label>
+              </div>
+              <div class="switch-row">
+                <div><b>GPU 兼容模式</b><span>沙箱或显卡驱动导致启动崩溃时自动开启，手动改动需重启</span></div>
+                <label class="switch"><input type="checkbox" id="gpuFallbackSwitch" /><i></i></label>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2>下载与目录</h2></div>
+              <div class="field">
+                <label>下载源</label>
+                <div class="segmented wide" id="sourceSwitch2">
+                  <button class="seg" data-source="bmcl">镜像加速（BMCLAPI）</button>
+                  <button class="seg" data-source="mojang">官方源（Mojang）</button>
+                </div>
+              </div>
+              <div class="field">
+                <label>游戏目录</label>
+                <div class="row">
+                  <input class="input" id="mcDirInput" readonly />
+                  <button class="btn-sm" id="btnPickMcDir">更改…</button>
+                  <button class="btn-sm" id="btnRevealMcDir">打开</button>
+                </div>
+              </div>
+              <div class="field">
+                <label>并发下载数 <b id="threadLabel">8</b></label>
+                <input type="range" id="threads" min="1" max="16" step="1" />
+              </div>
+              <div class="switch-row">
+                <div><b>自动检查新版本</b><span>每 5 分钟在后台拉取一次版本清单</span></div>
+                <label class="switch"><input type="checkbox" id="autoCheckSwitch" /><i></i></label>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2>游戏目录</h2><button class="btn-sm" id="btnAddDir">添加目录</button></div>
+              <p class="hint">自动发现官方启动器、PCL 等目录；主目录用于安装新版本。</p>
+              <div class="dir-list" id="dirList"></div>
+            </div>
+
+            <div class="card about-card">
+              <div class="card-head"><h2>关于 SMUCL</h2></div>
+              <div class="about-body">
+                <img class="pixel" src="../assets/logo-mc-128.png" alt="" />
+                <div>
+                  <b>SMUCL 1.1.0</b>
+                  <p>上海海事大学 Minecraft 启动器。界面参考 SJMC Launcher 的信息层级，采用 Minecraft 风格的像素与斜角视觉。</p>
+                  <div class="about-links">
+                    <button class="ghost-link" data-open="https://mc.sjtu.cn/sjmcl">SJMC 官网</button>
+                    <button class="ghost-link" data-open="https://github.com/UNIkeEN/SJMCL">GitHub</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- ============ 日志面板 ============ -->
+    <div class="log-panel" id="logPanel" hidden>
+      <div class="log-head">
+        <div class="log-title"><span class="pulse"></span>运行日志</div>
+        <div class="log-actions">
+          <button class="btn-ghost" id="btnClearLog">清空</button>
+          <button class="btn-ghost" id="btnToggleLog">收起</button>
+        </div>
+      </div>
+      <div class="log-body" id="logBody"></div>
+    </div>
+
+    <button class="log-fab" id="logFab" hidden>
+      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
+      日志
+    </button>
+
+    <div class="toasts" id="toasts"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

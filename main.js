@@ -1,0 +1,558 @@
+'use strict';
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Notification } = require('electron');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
+
+const settingsLib = require('./core/settings');
+const javaLib = require('./core/java');
+const versionLib = require('./core/version');
+const installer = require('./core/install');
+const launcher = require('./core/launch');
+const dirsLib = require('./core/dirs');
+const savesLib = require('./core/saves');
+
+// Windows 上部分镜像的 AAAA 记录不可达，IPv6 优先会白等十几次超时
+try {
+  require('dns').setDefaultResultOrder('ipv4first');
+} catch {
+  /* 旧版本 Node 无此 API，忽略 */
+}
+
+const isDev = process.argv.includes('--dev');
+let win = null;
+let gameProc = null;
+const installing = new Map();
+let javaCache = [];
+let latestInfo = null; // 最新版本信息（后台定时更新）
+
+// ------------------------------------------------------------------ GPU 兼容兜底
+// 部分机器（驱动异常、安全软件拦截）会导致 Chromium 的 GPU 进程一启动就崩溃，
+// 表现为 "GPU process isn't usable. Goodbye." 并直接退出。
+// 这里做两级处理：崩溃后写入标记并带 --no-sandbox 重启；标记存在时开机即走兼容参数。
+const FALLBACK_ARG = '--smucl-gpu-fallback';
+const isFallbackLaunch = process.argv.includes(FALLBACK_ARG);
+
+settingsLib.init();
+const bootSettings = settingsLib.all();
+
+function relaunchCompat() {
+  const args = process.argv.slice(1).concat(['--no-sandbox', FALLBACK_ARG]);
+  app.relaunch({ args });
+  app.exit(0);
+}
+
+if (bootSettings.gpuFallback && !isFallbackLaunch) {
+  console.log('[gpu] 上次检测到 GPU 崩溃，本次以兼容模式启动');
+  relaunchCompat();
+}
+
+app.on('child-process-gone', (_e, details) => {
+  if (!details || details.type !== 'GPU' || isFallbackLaunch) return;
+  if (details.reason === 'clean-exit' || details.reason === 'killed') return;
+  if (settingsLib.all().gpuFallback) return;
+  console.log('[gpu] GPU 进程异常退出，切换兼容模式重启：', details.reason);
+  settingsLib.save({ gpuFallback: true });
+  relaunchCompat();
+});
+
+// ------------------------------------------------------------------ 窗口
+function createWindow() {
+  win = new BrowserWindow({
+    width: 1220,
+    height: 800,
+    minWidth: 1020,
+    minHeight: 660,
+    show: false,
+    frame: false,
+    backgroundColor: '#0e1118',
+    title: 'SMUCL',
+    icon: path.join(__dirname, 'assets', 'icon.ico'),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      spellcheck: false,
+    },
+  });
+
+  win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+
+  // 把渲染进程的报错带回主进程日志，便于排查
+  win.webContents.on('console-message', (...args) => {
+    const d = args[1];
+    if (d && typeof d === 'object') {
+      if (d.level === 'error' || d.level === 'warning') console.log(`[renderer:${d.level}]`, d.message);
+    } else if (args[1] >= 2) {
+      console.log('[renderer]', args[2]);
+    }
+  });
+  win.once('ready-to-show', () => {
+    win.show();
+    if (isDev) win.webContents.openDevTools({ mode: 'detach' });
+  });
+  win.on('closed', () => {
+    win = null;
+  });
+
+  // 开发辅助：SMUCL_SHOT=1 [SMUCL_SHOT_VIEW=download] 自动截图后退出，便于核对界面
+  const shotMode = process.env.SMUCL_SHOT === '1' || process.argv.includes('--shot');
+  if (shotMode) {
+    const view = process.env.SMUCL_SHOT_VIEW || null;
+    win.webContents.once('did-finish-load', () => {
+      const delay = view === 'download' ? 12000 : view === 'saves' ? 9000 : 3000;
+      setTimeout(async () => {
+        try {
+          if (view) {
+            await win.webContents.executeJavaScript(
+              `document.querySelector('[data-view="${view}"]')?.click(); true`
+            );
+            await new Promise((r) => setTimeout(r, 1600));
+          }
+          const img = await win.webContents.capturePage();
+          const name = view ? `shot-${view}.png` : 'shot.png';
+          const outDir = path.join(__dirname, 'build');
+          fs.mkdirSync(outDir, { recursive: true });
+          fs.writeFileSync(path.join(outDir, name), img.toPNG());
+          console.log('[shot] saved', name);
+        } catch (e) {
+          console.error('[shot] failed', e);
+        }
+        app.quit();
+      }, delay);
+    });
+  }
+
+  // 外链走系统浏览器
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+}
+
+// ------------------------------------------------------------------ 目录与状态
+function getDirs() {
+  return dirsLib.all(settingsLib.all());
+}
+
+function appState() {
+  const settings = settingsLib.all();
+  const dirs = getDirs();
+  const installed = versionLib.listInstalled(dirs);
+  return {
+    settings,
+    javaList: javaCache,
+    dirs,
+    installed,
+    latest: latestInfo,
+    gpuFallback: Boolean(settingsLib.all().gpuFallback),
+    fallbackActive: isFallbackLaunch,
+    platform: process.platform,
+    version: app.getVersion(),
+    memoryTotal: Math.round(os.totalmem() / 1024 / 1024),
+  };
+}
+
+async function refreshJava() {
+  const settings = settingsLib.all();
+  const mcDirs = getDirs().map((d) => d.path);
+  javaCache = await javaLib.detect({
+    mcDir: settings.mcDir,
+    mcDirs,
+    preferred: settings.javaPath,
+  });
+  return javaCache;
+}
+
+/** 后台检查最新版本；发现变化时推送给渲染进程 */
+async function checkLatest(notify = true) {
+  const { downloadSource, autoCheck } = settingsLib.all();
+  if (!autoCheck && notify) return latestInfo;
+  try {
+    const data = await versionLib.getManifest(downloadSource, { force: true });
+    const next = {
+      release: data.latest.release,
+      snapshot: data.latest.snapshot,
+      source: data.__source || downloadSource,
+      at: Date.now(),
+    };
+    const changed =
+      !latestInfo || latestInfo.release !== next.release || latestInfo.snapshot !== next.snapshot;
+    latestInfo = next;
+    if (changed && notify && win && !win.isDestroyed()) {
+      win.webContents.send('manifest:latest', next);
+      // 窗口不在前台时补一条系统通知
+      if (!win.isFocused() && Notification.isSupported()) {
+        try {
+          const n = new Notification({
+            title: 'SMUCL · 发现新版本',
+            body: `Minecraft ${next.release} 已发布，点击启动器即可安装`,
+            silent: true,
+          });
+          n.on('click', () => {
+            if (!win) return;
+            if (win.isMinimized()) win.restore();
+            win.focus();
+          });
+          n.show();
+        } catch {
+          /* 通知不可用则忽略 */
+        }
+      }
+    }
+    return next;
+  } catch {
+    return latestInfo;
+  }
+}
+
+/** 首次启动：若默认目录没有实例，自动采用检测到的 PCL 目录 */
+function adoptLauncherDirIfNeeded() {
+  const configFile = path.join(app.getPath('userData'), 'smucl-config.json');
+  if (fs.existsSync(configFile)) return;
+
+  const count = (p) => {
+    try {
+      return fs
+        .readdirSync(path.join(p, 'versions'), { withFileTypes: true })
+        .filter((e) => e.isDirectory() && fs.existsSync(path.join(p, 'versions', e.name, `${e.name}.json`)))
+        .length;
+    } catch {
+      return 0;
+    }
+  };
+
+  const settings = settingsLib.all();
+  if (count(settings.mcDir) > 0) return;
+
+  const roots = dirsLib.findLauncherRoots();
+  for (const r of roots) {
+    const mc = path.join(r.dir, '.minecraft');
+    if (count(mc) > 0) {
+      settingsLib.save({ mcDir: mc });
+      console.log('[init] 已采用游戏目录:', mc);
+      return;
+    }
+  }
+}
+
+// ------------------------------------------------------------------ IPC
+function registerIpc() {
+  ipcMain.handle('app:state', async () => {
+    // 首屏不等 Java 扫描与体积统计
+    return { ok: true, data: appState() };
+  });
+
+  ipcMain.handle('java:detect', async () => {
+    try {
+      await refreshJava();
+      return { ok: true, data: javaCache };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('versions:manifest', async (_e, { force = false } = {}) => {
+    const { downloadSource } = settingsLib.all();
+    try {
+      const data = await versionLib.getManifest(downloadSource, { force });
+      latestInfo = {
+        release: data.latest.release,
+        snapshot: data.latest.snapshot,
+        source: data.__source || downloadSource,
+        at: Date.now(),
+      };
+      return {
+        ok: true,
+        data: {
+          latest: data.latest,
+          source: latestInfo.source,
+          checkedAt: latestInfo.at,
+          versions: data.versions.map((v) => ({
+            id: v.id,
+            type: v.type,
+            releaseTime: v.releaseTime,
+            url: v.url,
+          })),
+        },
+      };
+    } catch (e) {
+      return { ok: false, error: `版本列表获取失败：${e.message}` };
+    }
+  });
+
+  ipcMain.handle('versions:installed', async () => {
+    return { ok: true, data: versionLib.listInstalled(getDirs()) };
+  });
+
+  // 体积统计耗时较长，逐个推送给界面
+  ipcMain.handle('versions:sizes', async () => {
+    const installed = versionLib.listInstalled(getDirs());
+    const map = {};
+    for (const v of installed) {
+      const p = path.join(v.dir, 'versions', v.id);
+      const size = await savesLib.dirSize(p);
+      const key = `${v.dir}|${v.id}`;
+      map[key] = size;
+      if (win && !win.isDestroyed()) win.webContents.send('versions:size', { key, size });
+    }
+    return { ok: true, data: map };
+  });
+
+  // ---------------- 游戏目录管理 ----------------
+  ipcMain.handle('dirs:list', async () => {
+    return { ok: true, data: { dirs: getDirs(), settings: settingsLib.all(), installed: versionLib.listInstalled(getDirs()) } };
+  });
+
+  ipcMain.handle('dirs:add', async () => {
+    const res = await dialog.showOpenDialog(win, {
+      properties: ['openDirectory'],
+      title: '选择 .minecraft 目录（包含 versions/saves 的文件夹）',
+    });
+    if (res.canceled || !res.filePaths[0]) return { ok: true, data: null };
+    const picked = res.filePaths[0];
+    const settings = settingsLib.all();
+    const extra = Array.from(new Set([...(settings.extraDirs || []), picked]));
+    settingsLib.save({ extraDirs: extra });
+    return { ok: true, data: { dirs: getDirs(), installed: versionLib.listInstalled(getDirs()), settings: settingsLib.all() } };
+  });
+
+  ipcMain.handle('dirs:remove', async (_e, { path: target }) => {
+    const settings = settingsLib.all();
+    const extra = (settings.extraDirs || []).filter((p) => dirsLib.norm(p) !== dirsLib.norm(target));
+    settingsLib.save({ extraDirs: extra });
+    return { ok: true, data: { dirs: getDirs(), installed: versionLib.listInstalled(getDirs()), settings: settingsLib.all() } };
+  });
+
+  ipcMain.handle('dirs:setPrimary', async (_e, { path: target }) => {
+    if (!target) return { ok: false, error: '缺少目录' };
+    const settingsLibNext = settingsLib.save({ mcDir: target });
+    settingsLib.ensureGameDir();
+    await refreshJava().catch(() => {});
+    return {
+      ok: true,
+      data: { dirs: getDirs(), installed: versionLib.listInstalled(getDirs()), settings: settingsLibNext },
+    };
+  });
+
+  // ---------------- 存档 ----------------
+  ipcMain.handle('saves:list', async () => {
+    const dirs = getDirs();
+    try {
+      const list = await savesLib.scan(dirs, (done, total) => {
+        if (win && !win.isDestroyed()) win.webContents.send('saves:progress', { done, total });
+      });
+      return { ok: true, data: { saves: list, dirs } };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('saves:reveal', async (_e, { path: p }) => {
+    try {
+      shell.showItemInFolder(p);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('saves:trash', async (_e, { path: p }) => {
+    try {
+      await shell.trashItem(p);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // ---------------- 安装 / 删除 ----------------
+  ipcMain.handle('install:start', async (_e, { id, url }) => {
+    if (installing.has(id)) return { ok: false, error: '该版本正在安装中' };
+    if (!url) return { ok: false, error: '缺少版本元数据地址' };
+
+    installing.set(id, true);
+    const source = settingsLib.all().downloadSource;
+    try {
+      const result = await installer.install(id, { url }, source, (p) => {
+        if (win && !win.isDestroyed()) win.webContents.send('install:progress', p);
+      });
+      return { ok: true, data: result };
+    } catch (e) {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('install:progress', { id, stage: 'error', message: e.message, percent: 0 });
+      }
+      return { ok: false, error: e.message };
+    } finally {
+      installing.delete(id);
+    }
+  });
+
+  ipcMain.handle('version:delete', async (_e, { id, dir }) => {
+    const base = dir || settingsLib.all().mcDir;
+    const target = path.join(base, 'versions', id);
+    try {
+      if (!fs.existsSync(target)) throw new Error('目录不存在');
+      fs.rmSync(target, { recursive: true, force: true });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('version:command', async (_e, { id, dir }) => {
+    try {
+      const built = launcher.build(id, { ...settingsLib.all(), sourceDir: dir });
+      return {
+        ok: true,
+        data: `"${built.java}" ${built.args.map((a) => (a.includes(' ') ? `"${a}"` : a)).join(' ')}`,
+      };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // ---------------- 启动 ----------------
+  ipcMain.handle('game:launch', async (_e, { id, dir }) => {
+    if (gameProc) return { ok: false, error: '游戏已在运行中' };
+    const settings = settingsLib.all();
+    try {
+      const meta = versionLib.loadVersionJson(dir || settings.mcDir, id);
+
+      if (!javaCache.length) await refreshJava().catch(() => {});
+      const required = (meta.javaVersion && meta.javaVersion.majorVersion) || 8;
+      const preferred = settings.javaPath
+        ? javaCache.find((j) => j.java === settings.javaPath || j.path === settings.javaPath)
+        : null;
+      const picked = preferred || javaLib.pick(javaCache, required);
+
+      if (!picked) {
+        return {
+          ok: false,
+          error: '未检测到可用的 Java 运行时，请先在「设置 → Java 运行时」中指定 javaw.exe 路径',
+        };
+      }
+
+      const runtime = { ...settings, javaPath: picked.path, sourceDir: dir };
+      if (picked.major !== required && win && !win.isDestroyed()) {
+        win.webContents.send('game:log', {
+          line: `> 提示：${id} 需要 Java ${required}，当前使用 Java ${picked.major}，可能无法正常启动`,
+        });
+      }
+
+      const proc = launcher.launch(id, runtime, {
+        onLog: (line) => win && !win.isDestroyed() && win.webContents.send('game:log', { line }),
+        onError: (err) => win && !win.isDestroyed() && win.webContents.send('game:error', { message: err.message }),
+        onExit: (code) => {
+          gameProc = null;
+          if (win && !win.isDestroyed()) win.webContents.send('game:exit', { code });
+        },
+      });
+
+      gameProc = proc.child;
+      return {
+        ok: true,
+        data: { pid: proc.pid, java: picked, required, command: proc.command },
+      };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('game:kill', async () => {
+    if (!gameProc) return { ok: false, error: '没有正在运行的游戏' };
+    try {
+      gameProc.kill();
+      gameProc = null;
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('settings:save', async (_e, patch) => {
+    const next = settingsLib.save(patch);
+    if (patch.javaPath !== undefined && patch.javaPath !== null) {
+      await refreshJava().catch(() => {});
+    }
+    return { ok: true, data: next };
+  });
+
+  ipcMain.handle('dialog:pickDir', async () => {
+    const res = await dialog.showOpenDialog(win, {
+      properties: ['openDirectory', 'createDirectory'],
+      title: '选择目录',
+    });
+    return { ok: true, data: res.canceled ? null : res.filePaths[0] };
+  });
+
+  ipcMain.handle('dialog:pickJava', async () => {
+    const res = await dialog.showOpenDialog(win, {
+      properties: ['openFile'],
+      title: '选择 javaw.exe',
+      filters: [{ name: 'Java 可执行文件', extensions: ['exe'] }],
+    });
+    return { ok: true, data: res.canceled ? null : res.filePaths[0] };
+  });
+
+  ipcMain.handle('open:path', async (_e, { target }) => {
+    try {
+      const resolved = target === 'game' ? settingsLib.all().mcDir : target;
+      if (!fs.existsSync(resolved)) fs.mkdirSync(resolved, { recursive: true });
+      await shell.openPath(resolved);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('open:url', async (_e, { url }) => {
+    if (!/^https?:\/\//i.test(url)) return { ok: false, error: '非法链接' };
+    await shell.openExternal(url);
+    return { ok: true };
+  });
+
+  // 无边框窗口控制
+  ipcMain.on('win:minimize', () => win && win.minimize());
+  ipcMain.on('win:maximize', () => {
+    if (!win) return;
+    win.isMaximized() ? win.unmaximize() : win.maximize();
+  });
+  ipcMain.on('win:close', () => win && win.close());
+}
+
+// ------------------------------------------------------------------ 生命周期
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
+  });
+
+  app.whenReady().then(() => {
+    Menu.setApplicationMenu(null);
+    app.setAppUserModelId('cn.edu.shmtu.smucl');
+    settingsLib.ensureGameDir();
+    adoptLauncherDirIfNeeded();
+    registerIpc();
+    createWindow();
+
+    // 启动后延迟检查一次最新版本，之后每 5 分钟一次
+    setTimeout(() => checkLatest(false), 4000);
+    setInterval(() => {
+      if (settingsLib.all().autoCheck) checkLatest(true);
+    }, 5 * 60 * 1000);
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+  });
+}
