@@ -263,9 +263,18 @@ html, body {
 }
 .link-btn:hover { color: #cfe0f8; border-color: #cfe0f8; }
 
-.hero-art { position: relative; display: grid; place-items: center; padding-right: 14px; }
+.hero-art {
+  position: relative;
+  width: 200px; height: 200px;
+  display: grid; place-items: center;
+  flex: 0 0 auto;
+  animation: float 6s ease-in-out infinite;
+}
+/* 环与徽标必须同心：绝对定位 + inset:0 + margin:auto 居中，
+   只写 position:absolute 会锚到容器左上角，环就会往右下偏出去 */
 .hero-ring {
-  position: absolute; width: 190px; height: 190px; border-radius: 50%;
+  position: absolute; inset: 0; margin: auto;
+  width: 190px; height: 190px; border-radius: 50%;
   border: 1px dashed rgba(150, 190, 240, 0.28);
   animation: spin 26s linear infinite;
 }
@@ -273,7 +282,6 @@ html, body {
 .hero-badge {
   width: 152px; height: 152px;
   filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.5));
-  animation: float 6s ease-in-out infinite;
 }
 @keyframes float {
   0%, 100% { transform: translateY(0); }
