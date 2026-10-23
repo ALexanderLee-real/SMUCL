@@ -4,10 +4,12 @@
  */
 
 const ARCH_MAP = { x64: 'x64', ia32: 'x86', arm64: 'arm64' };
+// Mojang 的规则里写的是 windows / osx / linux，Node 的 process.platform 是 win32 / darwin
+const OS_NAME = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : process.platform;
 
 function matchOs(os) {
   if (!os) return true;
-  if (os.name && os.name !== process.platform) return false;
+  if (os.name && os.name !== OS_NAME) return false;
   if (os.arch) {
     const cur = ARCH_MAP[process.arch] || process.arch;
     if (os.arch !== cur) return false;

@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const AdmZip = require('adm-zip');
 
 const versionLib = require('./version');
 const rules = require('./rules');
@@ -40,21 +41,94 @@ function resolveClientJar(mcDir, id, meta) {
   return own;
 }
 
+// 版本 JSON 里的 natives 分类器常常只写了 os.name，没写 arch，
+// 三个架构的包会同时命中；这里按当前架构再筛一遍，避免加载到 arm64/x86 的 DLL。
+function nativesAllowed(name) {
+  const cls = String(name || '').split(':')[3];
+  if (!cls || !cls.startsWith('natives-')) return true;
+  const body = cls.slice('natives-'.length);
+  if (OS_NAME === 'windows') {
+    if (!body.startsWith('windows')) return false;
+    const arch = body.slice('windows'.length).replace(/^-/, '');
+    if (!arch) return process.arch === 'x64';
+    if (arch === 'x86') return process.arch === 'ia32';
+    if (arch === 'arm64') return process.arch === 'arm64';
+    return false;
+  }
+  if (OS_NAME === 'osx') {
+    if (!body.startsWith('macos')) return false;
+    return body.endsWith('arm64') ? process.arch === 'arm64' : process.arch !== 'arm64';
+  }
+  if (!body.startsWith(OS_NAME)) return false;
+  const arch = body.slice(OS_NAME.length).replace(/^-/, '');
+  if (!arch) return process.arch === 'x64';
+  if (arch === 'arm64') return process.arch === 'arm64';
+  if (arch === 'arm32') return process.arch === 'arm';
+  return true;
+}
+
+/**
+ * 返回 { classpath, nativeJars }：natives 包不进 classpath，改为解压到 natives 目录，
+ * 与官方启动器行为一致（LWJGL 2 只认 java.library.path，不认 classpath）。
+ */
 function libraryEntries(meta, mcDir) {
-  const out = [];
+  const classpath = [];
+  const nativeJars = [];
   for (const lib of meta.libraries || []) {
     if (!rules.allowed(lib.rules, {})) continue;
+    const name = lib.name || '';
+    if (!nativesAllowed(name)) continue;
+    const classifier = String(name).split(':')[3] || '';
     const art = lib.downloads && lib.downloads.artifact;
     if (art && art.path) {
-      out.push(path.join(mcDir, 'libraries', art.path));
-    } else if (!lib.downloads && lib.name) {
-      const parts = lib.name.split(':');
+      const p = path.join(mcDir, 'libraries', art.path);
+      if (classifier.startsWith('natives-')) nativeJars.push(p);
+      else classpath.push(p);
+    } else if (!lib.downloads && name) {
+      const parts = name.split(':');
       const [g, a, v, c] = parts;
       const file = `${a}-${v}${c ? `-${c}` : ''}.jar`;
-      out.push(path.join(mcDir, 'libraries', g.replace(/\./g, '/'), a, v, file));
+      classpath.push(path.join(mcDir, 'libraries', g.replace(/\./g, '/'), a, v, file));
+    }
+    // 旧版格式：natives 通过 downloads.classifiers 提供，例如 1.12 的 LWJGL 2
+    const nativeKey = lib.natives && lib.natives[OS_NAME];
+    if (nativeKey) {
+      const cls = nativeKey.replace('${arch}', process.arch === 'ia32' ? '32' : '64');
+      const d = lib.downloads && lib.downloads.classifiers && lib.downloads.classifiers[cls];
+      if (d && d.path) nativeJars.push(path.join(mcDir, 'libraries', d.path));
     }
   }
-  return out.filter((p) => fs.existsSync(p));
+  return {
+    classpath: classpath.filter((p) => fs.existsSync(p)),
+    nativeJars: nativeJars.filter((p) => fs.existsSync(p)),
+  };
+}
+
+function extractNatives(nativeJars, nativesDir) {
+  if (!nativeJars.length) return;
+  try {
+    fs.mkdirSync(nativesDir, { recursive: true });
+  } catch {
+    return;
+  }
+  for (const jar of nativeJars) {
+    let zip;
+    try {
+      zip = new AdmZip(jar);
+    } catch {
+      continue;
+    }
+    for (const entry of zip.getEntries()) {
+      if (entry.isDirectory || !/\.(dll|so|dylib)$/i.test(entry.entryName)) continue;
+      const dest = path.join(nativesDir, path.basename(entry.entryName));
+      try {
+        if (fs.existsSync(dest) && fs.statSync(dest).size === entry.header.size) continue;
+        fs.writeFileSync(dest, entry.getData());
+      } catch {
+        /* 被占用或无权限时跳过，交给 java.library.path 里已有的 DLL */
+      }
+    }
+  }
 }
 
 function findLoggingConfig(mcDir, meta) {
@@ -101,7 +175,9 @@ function build(id, options = {}) {
   const nativesDir = resolveNativesDir(instanceDir, id);
 
   const clientJar = resolveClientJar(mcDir, id, meta);
-  const classpath = [clientJar, ...libraryEntries(meta, mcDir)].join(path.delimiter);
+  const { classpath: libs, nativeJars } = libraryEntries(meta, mcDir);
+  const classpath = [clientJar, ...libs].join(path.delimiter);
+  extractNatives(nativeJars, nativesDir);
 
   const features = {
     is_demo_user: false,
@@ -246,4 +322,4 @@ function launch(id, options, handlers = {}) {
   return { child, pid: child.pid, command: `${java} ${args.join(' ')}` };
 }
 
-module.exports = { launch, build, offlineUuid };
+module.exports = { launch, build, offlineUuid, extractNatives };
