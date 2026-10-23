@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https://cdn.modrinth.com https://media.forgecdn.net https://edge.forgecdn.net; style-src 'self' 'unsafe-inline'; script-src 'self';" />
   <title>SMUCL — 上海海事大学 Minecraft 启动器</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -61,6 +61,10 @@
             <span>下载游戏</span>
             <i class="nav-dot" id="navUpdateDot" hidden></i>
           </button>
+          <button class="nav-item" data-view="packs">
+            <svg viewBox="0 0 24 24"><path d="M3.5 8.5 12 4l8.5 4.5v7L12 20l-8.5-4.5z" /><path d="M3.5 8.5 12 13l8.5-4.5" /><path d="M12 13v7" /><path d="M7.7 6.2 16.3 11" /></svg>
+            <span>整合包</span>
+          </button>
           <button class="nav-item" data-view="saves">
             <svg viewBox="0 0 24 24"><path d="M4 7.5 12 4l8 3.5v9L12 20l-8-3.5z" /><path d="M4 7.5 12 11l8-3.5" /><path d="M12 11v9" /></svg>
             <span>存档</span>
@@ -82,7 +86,7 @@
             <span class="badge-offline">本地</span>
           </div>
           <button class="update-pill" id="updatePill" hidden>发现新版本</button>
-          <div class="side-hint">SMUCL v1.4.2 · 基于 Electron</div>
+          <div class="side-hint">SMUCL v1.5.0 · 基于 Electron</div>
         </div>
       </aside>
 
@@ -171,7 +175,7 @@
               </div>
 
               <div class="card notice-card">
-                <div class="card-head"><h2>公告</h2><span class="chip">v1.4.2</span></div>
+                <div class="card-head"><h2>公告</h2><span class="chip">v1.5.0</span></div>
                 <ul class="notice-list">
                   <li>
                     <b>镜像加速已开启</b>
@@ -268,6 +272,35 @@
 
           <div class="dl-list" id="dlList">
             <div class="dl-loading"><span class="spinner"></span>正在获取版本列表…</div>
+          </div>
+        </section>
+
+        <!-- ---------- 整合包 ---------- -->
+        <section class="view" id="view-packs">
+          <div class="view-head">
+            <div>
+              <h1>整合包</h1>
+              <p>从 Modrinth / CurseForge 搜索并一键安装，自动补原版与加载器。</p>
+            </div>
+            <div class="segmented" id="packSource">
+              <button class="seg active" data-source="modrinth">Modrinth</button>
+              <button class="seg" data-source="curseforge">CurseForge</button>
+            </div>
+          </div>
+
+          <div class="toolbar">
+            <input class="input search" id="packSearch" placeholder="搜索整合包，例如 Fabulously Optimized" />
+            <div class="toolbar-right">
+              <button class="btn-sm primary" id="btnPackSearch">搜索</button>
+            </div>
+          </div>
+
+          <div class="pack-notice" id="packNotice" hidden></div>
+          <div class="pack-grid" id="packGrid"></div>
+          <div class="empty" id="packEmpty" hidden>
+            <img class="pixel" src="../assets/logo-mc-128.png" alt="" />
+            <b id="packEmptyTitle">还没有搜索</b>
+            <p id="packEmptyText">输入关键词后点搜索，结果会显示在这里。</p>
           </div>
         </section>
 
@@ -407,12 +440,12 @@
             <div class="card about-card">
               <div class="card-head">
                 <h2>关于 SMUCL</h2>
-                <span class="chip" id="aboutVersion">v1.4.2</span>
+                <span class="chip" id="aboutVersion">v1.5.0</span>
               </div>
               <div class="about-body">
                 <img class="pixel" src="../assets/logo-mc-128.png" alt="" />
                 <div>
-                  <b>SMUCL <span id="aboutVersionText">1.4.2</span></b>
+                  <b>SMUCL <span id="aboutVersionText">1.5.0</span></b>
                   <p>上海海事大学 Minecraft 启动器。界面参考 SJMC Launcher 的信息层级，采用 Minecraft 风格的像素与斜角视觉。</p>
                   <div class="about-links">
                     <button class="ghost-link" id="btnCheckUpdate">检查更新</button>

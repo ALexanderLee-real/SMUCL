@@ -9,7 +9,7 @@
 [![Electron](https://img.shields.io/badge/Electron-45-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white)](#)
 [![License](https://img.shields.io/badge/license-MIT-3DA639)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.4.2-3b7dd8](#)
+[![Version](https://img.shields.io/badge/version-1.5.0-3b7dd8](#)
 [![Release](https://img.shields.io/github/v/release/Survaetr/SMUCL?label=release&color=3DA639)](https://github.com/Survaetr/SMUCL/releases)
 
 </div>
@@ -31,6 +31,7 @@
 | 版本管理 | 跨目录汇总实例，显示加载器 / 模组数 / 是否版本隔离 / 占用空间，支持启动、打开目录、复制启动命令、删除；可导入 PCL / HMCL 导出的整合包 zip（预览 → 同名自动改名 → 校验依赖库） |
 | 存档 | 扫描所有目录与实例的 `saves`，解析 `level.dat` 得到世界名、版本、模式、最后游玩；支持按文件夹（实例）/ 版本 / 时间分组、定位与移至回收站 |
 | 下载游戏 | 拉取 Mojang 版本清单，按正式版 / 快照 / 旧版筛选，逐行进度条安装；中断的实例显示「修复」；可在线安装 Fabric / Quilt / Forge / NeoForge 加载器（底座缺失自动补装） |
+| 整合包 | 从 Modrinth / CurseForge 搜索并一键安装，自动补原版与加载器，建版本隔离实例；也支持导入本地 zip |
 | 设置 | Java 运行时扫描与指定、内存、JVM 参数、全屏、显卡偏好（写入 Windows 图形设置）、下载源、并发数、游戏目录管理、自动检查新版本 |
 | 主题 | 深色 / 浅色 / 跟随系统，标题栏右上角一键切换 |
 | 在线更新 | 检查本仓库 Release，下载 `app-<version>.zip` 增量更新包并自动重启；升级后首次启动弹出更新日志 |
@@ -138,6 +139,14 @@ SMUCL/
 → 把 `dist/app-<version>.zip` 上传到对应 Release。
 
 ## 更新记录
+
+**v1.5.0**
+
+- 新增「整合包」页：从 Modrinth 搜索并一键安装，CurseForge 需填写免费 API Key
+- 安装时自动补原版与加载器，实例采用「整合包 → 加载器 → 原版」三层继承，不复制客户端
+- 文件按 sha1 校验，不符自动重下；overrides 解压到实例目录
+- 修复客户端 jar 只向上找一层的问题（三层继承时会找不到 jar）
+- 加载器依赖增加多源回退：镜像 → 官方 → Maven Central
 
 **v1.4.2**
 

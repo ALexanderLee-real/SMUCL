@@ -1243,3 +1243,60 @@ html[data-theme="light"] .pack-warn { color: #8a5d05; }
 #loaderStatus.busy { color: var(--brand-2); }
 #loaderStatus.err { color: #e06666; }
 .loader-card .hint { font-size: 11.5px; line-height: 1.6; }
+
+/* =========================================================
+   整合包搜索
+   ========================================================= */
+.pack-notice {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px; margin-bottom: 16px;
+  border-radius: 10px;
+  background: rgba(233, 182, 74, 0.09);
+  border: 1px solid rgba(233, 182, 74, 0.26);
+  font-size: 12.5px; line-height: 1.6; color: var(--txt-2);
+}
+.pack-notice b { color: var(--txt); }
+.pack-notice .input { flex: 1 1 260px; height: 34px; }
+html[data-theme="light"] .pack-notice { color: #6b5327; }
+
+.pack-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+.pack-card {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 14px;
+  background: linear-gradient(180deg, var(--card) 0%, var(--card-sunken) 100%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color .16s, transform .16s;
+}
+.pack-card:hover { border-color: var(--brand-2); transform: translateY(-2px); }
+.pack-card img {
+  width: 52px; height: 52px; border-radius: 10px; object-fit: cover;
+  background: var(--bg-2); flex: 0 0 auto;
+}
+.pack-card .pack-info { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.pack-card b { font-size: 13.5px; font-weight: 600; color: var(--txt); }
+.pack-card p {
+  font-size: 11.5px; color: var(--txt-2); line-height: 1.55; margin: 0;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.pack-card .pack-meta {
+  font-size: 10.5px; color: var(--dim); font-family: var(--font-num);
+  display: flex; gap: 10px; flex-wrap: wrap;
+}
+.pack-ver-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 4px; border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.pack-ver-row:last-child { border-bottom: none; }
+.pack-ver-row b { font-weight: 500; color: var(--txt); font-family: var(--font-num); }
+.pack-ver-row span { color: var(--dim); font-size: 11px; }
+.pack-ver-row em {
+  margin-left: auto; font-style: normal; font-size: 10.5px;
+  padding: 1px 7px; border-radius: 5px;
+  background: rgba(106, 164, 240, 0.14); color: #9fc4f5;
+}

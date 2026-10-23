@@ -309,6 +309,7 @@ function switchView(name) {
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${name}`));
   $('.content').scrollTop = 0;
   if (name === 'saves' && S.saves === null) loadSaves({ quiet: true });
+  if (name === 'packs' && !S.packHits.length) renderPackResults();
   if (name === 'versions') refreshSizes();
 }
 
@@ -566,6 +567,273 @@ async function installLoader() {
   } finally {
     btn.disabled = false;
   }
+}
+
+
+/* ---------------------------------------------------------------- 整合包商店 */
+S.packSource = 'modrinth';
+S.packHits = [];
+S.packBusy = false;
+
+function fmtCount(n) {
+  const v = Number(n) || 0;
+  if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}k`;
+  return String(v);
+}
+
+function showPackNotice(mode) {
+  const el = $('#packNotice');
+  if (!el) return;
+  if (mode === 'key') {
+    el.hidden = false;
+    el.innerHTML = `
+      <div><b>CurseForge 需要 API Key</b>　在 CurseForge 官网免费申请后填到这里，只在本地保存。</div>
+      <input class="input" id="cfKeyInput" placeholder="粘贴 CurseForge API Key" />
+      <button class="btn-sm primary" id="btnSaveCfKey">保存</button>
+      <button class="btn-sm" id="btnOpenCfKey">去申请</button>`;
+    $('#btnOpenCfKey').onclick = () => api.openUrl('https://console.curseforge.com/?#/api-keys');
+    $('#btnSaveCfKey').onclick = async () => {
+      const key = $('#cfKeyInput').value.trim();
+      if (!key) return;
+      await api.setCfKey(key);
+      showPackNotice('done');
+      searchPacks();
+    };
+  } else if (mode === 'done') {
+    el.hidden = false;
+    el.style.background = 'rgba(106, 164, 240, 0.10)';
+    el.style.borderColor = 'rgba(106, 164, 240, 0.28)';
+    el.innerHTML = '<div>已保存 CurseForge API Key，可以搜索了。</div>';
+  } else {
+    el.hidden = true;
+    el.innerHTML = '';
+  }
+}
+
+function renderPackResults() {
+  const grid = $('#packGrid');
+  const empty = $('#packEmpty');
+  if (!grid) return;
+
+  if (!S.packHits.length) {
+    grid.innerHTML = '';
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+
+  grid.innerHTML = S.packHits
+    .map(
+      (h) => `
+      <div class="pack-card" data-id="${esc(h.id)}">
+        <img src="${esc(h.icon || '')}" alt="" />
+        <div class="pack-info">
+          <b>${esc(h.title)}</b>
+          <p>${esc(h.description || '')}</p>
+          <div class="pack-meta">
+            <span>↓ ${fmtCount(h.downloads)}</span>
+            ${h.author ? `<span>${esc(h.author)}</span>` : ''}
+            ${h.versions && h.versions.length ? `<span>${esc(h.versions.slice(-1)[0])}</span>` : ''}
+          </div>
+        </div>
+      </div>`
+    )
+    .join('');
+
+  // CSP 禁止内联 onerror，改成统一挂监听
+  grid.querySelectorAll('img').forEach((img) => {
+    img.addEventListener('error', () => {
+      img.style.visibility = 'hidden';
+    });
+  });
+}
+
+async function searchPacks() {
+  if (S.packBusy) return;
+  const q = ($('#packSearch').value || '').trim();
+  S.packBusy = true;
+  $('#btnPackSearch').disabled = true;
+  $('#packEmpty').hidden = false;
+  $('#packEmptyTitle').textContent = '正在搜索…';
+  $('#packEmptyText').textContent = S.packSource === 'modrinth' ? '请求 Modrinth' : '请求 CurseForge';
+  $('#packGrid').innerHTML = '';
+
+  const r = await api.searchPacks(S.packSource, q, 0);
+  S.packBusy = false;
+  $('#btnPackSearch').disabled = false;
+
+  if (!r.ok) {
+    S.packHits = [];
+    renderPackResults();
+    if (r.needKey) {
+      showPackNotice('key');
+      $('#packEmptyTitle').textContent = '需要 API Key';
+      $('#packEmptyText').textContent = '填好 Key 后会自动重新搜索。';
+    } else {
+      showPackNotice(false);
+      $('#packEmptyTitle').textContent = '搜索失败';
+      $('#packEmptyText').textContent = r.error || '网络异常，稍后再试';
+    }
+    return;
+  }
+
+  showPackNotice(false);
+  S.packHits = r.data.hits || [];
+  renderPackResults();
+  if (!S.packHits.length) {
+    $('#packEmptyTitle').textContent = '没有找到结果';
+    $('#packEmptyText').textContent = '换个关键词试试，或者切换来源。';
+  }
+}
+
+function packVersionLabel(v) {
+  const mc = v.gameVersions || [];
+  const plain = mc.filter((x) => /^\d+(\.\d+)+$/.test(x));
+  const loaders = (v.loaders || []).filter(Boolean);
+  return {
+    mc: plain.slice(0, 3).join(' / ') || mc.join(' / '),
+    loader: loaders.slice(0, 2).join(' / '),
+  };
+}
+
+async function openPackVersions(hit) {
+  openModal({
+    title: hit.title,
+    sub: '正在读取版本列表…',
+    html: '<div class="pack-ver-row"><span>请稍候</span></div>',
+    buttons: [{ text: '关闭' }],
+  });
+
+  const r = await api.packVersions(S.packSource, hit.id);
+  if (!r.ok) {
+    openModal({
+      title: hit.title,
+      sub: '读取失败',
+      html: `<div>${esc(r.error || '未知错误')}</div>`,
+      buttons: [{ text: '知道了', primary: true }],
+    });
+    return;
+  }
+
+  const list = (r.data || []).slice(0, 40);
+  if (!list.length) {
+    openModal({
+      title: hit.title,
+      sub: '没有可用版本',
+      html: '<div>这个整合包暂时没有可下载的版本。</div>',
+      buttons: [{ text: '知道了', primary: true }],
+    });
+    return;
+  }
+
+  const rows = list
+    .map((v, i) => {
+      const { mc, loader } = packVersionLabel(v);
+      const file = v.file || {};
+      return `<div class="pack-ver-row" data-idx="${i}">
+        <b>${esc(v.number || v.name || '')}</b>
+        <span>${esc(mc)}${loader ? ' · ' + esc(loader) : ''}</span>
+        <em>${esc(v.type || '')}</em>
+        <button class="btn-sm" data-install="${i}">安装</button>
+      </div>`;
+    })
+    .join('');
+
+  openModal({
+    title: hit.title,
+    sub: `共 ${r.data.length} 个版本，列出最近 ${list.length} 个`,
+    html: `<div class="pack-ver-list">${rows}</div>`,
+    buttons: [{ text: '关闭' }],
+  });
+
+  $('#modalBody').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-install]');
+    if (!btn) return;
+    const v = list[Number(btn.dataset.install)];
+    if (!v || !v.file || !v.file.url) {
+      toast('这个版本没有可用的下载地址', 'err');
+      return;
+    }
+    const { mc } = packVersionLabel(v);
+    startPackInstall(hit, v, mc.split(' / ')[0]);
+  });
+}
+
+async function startPackInstall(hit, ver, mcVersion) {
+  const body = $('#modalBody');
+  const foot = $('#modalFoot');
+  if (foot) foot.innerHTML = '';
+  const paint = (percent, message) => {
+    if (!body) return;
+    body.innerHTML = `<div class="pack-ver-row" style="border:none">
+        <b>${esc(hit.title)}</b><span>${esc(ver.number || '')}</span>
+      </div>
+      <div class="pack-ver-row" style="border:none"><span>${esc(message || '准备中…')}</span></div>
+      <div class="pack-ver-row" style="border:none">
+        <div style="flex:1;height:6px;border-radius:3px;background:var(--bg-2);overflow:hidden">
+          <div style="width:${Math.max(2, percent || 0)}%;height:100%;background:var(--brand-2);transition:width .3s"></div>
+        </div>
+        <b style="width:42px;text-align:right">${Math.round(percent || 0)}%</b>
+      </div>`;
+  };
+  paint(1, '准备中…');
+
+  const off = api.onPack((p) => {
+    if (!p) return;
+    if (p.stage === 'error') return;
+    paint(p.percent || 0, p.message || p.stage);
+  });
+
+  const r = await api.installPack({
+    source: S.packSource,
+    downloadUrl: ver.file.url,
+    fileName: ver.file.filename || '',
+    mcVersion: mcVersion || '',
+  });
+  off && off();
+
+  if (!r.ok) {
+    paint(0, '失败');
+    toast(r.error, 'err');
+    openModal({
+      title: '安装失败',
+      sub: hit.title,
+      html: `<div>${esc(r.error)}</div>`,
+      buttons: [{ text: '知道了', primary: true }],
+    });
+    return;
+  }
+
+  const d = r.data;
+  const fails = (d.failed || []).length;
+  openModal({
+    title: '安装完成',
+    sub: `${d.name} · ${d.files} 个文件`,
+    html: `<div class="pack-preview">
+        ${packRow('实例', d.id)}
+        ${packRow('游戏版本', d.mcVersion)}
+        ${packRow('加载器', d.loaderId)}
+        ${packRow('配置文件', d.overrides ? `${d.overrides} 个` : '')}
+      </div>
+      ${
+        fails
+          ? `<div class="pack-warn">有 ${fails} 个文件下载失败，进游戏可能缺模组，可重装一次补齐。</div>`
+          : ''
+      }`,
+    buttons: [
+      {
+        text: '去版本管理',
+        primary: true,
+        onClick: async () => {
+          closeModal();
+          await refreshInstalledAndRender();
+          switchView('versions');
+        },
+      },
+    ],
+  });
+  refreshInstalledAndRender();
 }
 
 
@@ -1314,6 +1582,28 @@ function bindEvents() {
 
   $('#btnRefreshInstalled').onclick = refreshInstalledAndRender;
   $('#btnImportPack').onclick = () => importPackFlow();
+
+  // 整合包商店
+  $$('#packSource .seg').forEach((b) => {
+    b.onclick = () => {
+      if (S.packSource === b.dataset.source) return;
+      S.packSource = b.dataset.source;
+      $$('#packSource .seg').forEach((x) => x.classList.toggle('active', x === b));
+      S.packHits = [];
+      renderPackResults();
+      searchPacks();
+    };
+  });
+  $('#btnPackSearch').onclick = searchPacks;
+  $('#packSearch').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.isComposing) searchPacks();
+  });
+  $('#packGrid').addEventListener('click', (e) => {
+    const card = e.target.closest('.pack-card');
+    if (!card) return;
+    const hit = S.packHits.find((h) => h.id === card.dataset.id);
+    if (hit) openPackVersions(hit);
+  });
 
   // 模组加载器
   $$('#loaderSwitch .seg').forEach((b) => {

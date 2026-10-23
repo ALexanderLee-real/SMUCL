@@ -15,6 +15,8 @@ const updater = require('./core/updater');
 const gpuLib = require('./core/gpu');
 const packLib = require('./core/pack');
 const loadersLib = require('./core/loaders');
+const modrinthLib = require('./core/modrinth');
+const curseforgeLib = require('./core/curseforge');
 
 // Windows 上部分镜像的 AAAA 记录不可达，IPv6 优先会白等十几次超时
 try {
@@ -578,6 +580,95 @@ function registerIpc() {
       filters: [{ name: 'Java 可执行文件', extensions: ['exe'] }],
     });
     return { ok: true, data: res.canceled ? null : res.filePaths[0] };
+  });
+
+  // ---------------- 整合包（Modrinth / CurseForge） ----------------
+  /** 按版本号从 Mojang 清单里找原版下载地址，整合包要拿它补底座 */
+  const vanillaUrl = async (mcVersion) => {
+    try {
+      const data = await versionLib.getManifest(settingsLib.all().downloadSource, {});
+      const hit = (data.versions || []).find((v) => v.id === mcVersion);
+      return hit ? hit.url : '';
+    } catch {
+      return '';
+    }
+  };
+
+  /** 按原版要求挑 Java，安装器要用 java.exe 才能拿到输出 */
+  const javaFor = async (mcVersion) => {
+    const settings = settingsLib.all();
+    let required = 17;
+    try {
+      const meta = versionLib.loadVersionJson(settings.mcDir, mcVersion);
+      required = (meta.javaVersion && meta.javaVersion.majorVersion) || 17;
+    } catch {
+      /* 元数据读不到就按 17 兜底 */
+    }
+    if (!javaCache.length) await refreshJava().catch(() => {});
+    const preferred = settings.javaPath
+      ? javaCache.find((j) => j.java === settings.javaPath || j.path === settings.javaPath)
+      : null;
+    const picked = preferred || javaLib.pick(javaCache, required);
+    return picked ? picked.java || picked.path : '';
+  };
+
+  const cfKey = () => settingsLib.all().cfApiKey || '';
+
+  ipcMain.handle('modpack:search', async (_e, { source, query, offset = 0 }) => {
+    try {
+      if (source === 'curseforge') {
+        if (!cfKey()) return { ok: false, needKey: true, error: '需要 CurseForge API Key' };
+        return { ok: true, data: await curseforgeLib.search(cfKey(), query, { offset }) };
+      }
+      return { ok: true, data: await modrinthLib.search(query, { offset }) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('modpack:versions', async (_e, { source, projectId }) => {
+    try {
+      if (source === 'curseforge') {
+        if (!cfKey()) return { ok: false, needKey: true, error: '需要 CurseForge API Key' };
+        return { ok: true, data: await curseforgeLib.files(cfKey(), projectId) };
+      }
+      return { ok: true, data: await modrinthLib.versions(projectId) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('modpack:install', async (_e, { source, downloadUrl, fileName, mcVersion }) => {
+    const send = (p) => {
+      if (win && !win.isDestroyed()) win.webContents.send('modpack:progress', p);
+    };
+    try {
+      const baseUrl = await vanillaUrl(mcVersion);
+      const javaPath = await javaFor(mcVersion);
+      const common = {
+        gameDir: settingsLib.all().mcDir,
+        downloadUrl,
+        fileName,
+        javaPath,
+        source: settingsLib.all().downloadSource === 'mojang' ? 'mojang' : 'bmcl',
+        baseUrl,
+        onProgress: send,
+      };
+      const r =
+        source === 'curseforge'
+          ? await curseforgeLib.installVersion({ ...common, apiKey: cfKey() })
+          : await modrinthLib.installVersion(common);
+      if (r.ok) send({ stage: 'done', message: '安装完成', percent: 100 });
+      return r;
+    } catch (e) {
+      send({ stage: 'error', message: e.message });
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('modpack:setKey', async (_e, { key }) => {
+    const r = await settingsLib.save({ cfApiKey: String(key || '').trim() });
+    return { ok: true, data: r };
   });
 
   // ---------------- 模组加载器 ----------------

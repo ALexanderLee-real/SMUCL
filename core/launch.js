@@ -28,9 +28,19 @@ function offlineUuid(name) {
 function resolveClientJar(mcDir, id, meta) {
   const own = path.join(mcDir, 'versions', id, `${id}.jar`);
   if (fs.existsSync(own)) return own;
-  if (meta.inheritsFrom) {
-    const parent = path.join(mcDir, 'versions', meta.inheritsFrom, `${meta.inheritsFrom}.jar`);
-    if (fs.existsSync(parent)) return parent;
+  // 整合包实例 -> 加载器 -> 原版，客户端 jar 只在最底层，得顺着 inheritsFrom 一路往上找
+  let cur = meta && meta.inheritsFrom;
+  for (let i = 0; cur && i < 5; i++) {
+    const jar = path.join(mcDir, 'versions', cur, `${cur}.jar`);
+    if (fs.existsSync(jar)) return jar;
+    let next = null;
+    try {
+      const json = JSON.parse(fs.readFileSync(path.join(mcDir, 'versions', cur, `${cur}.json`), 'utf8'));
+      next = json.inheritsFrom || null;
+    } catch {
+      next = null;
+    }
+    cur = next;
   }
   // 兜底：扫描同目录下任意 jar
   const dir = path.join(mcDir, 'versions', id);
@@ -210,7 +220,7 @@ function build(id, options = {}) {
     '${classpath_separator}': path.delimiter,
     '${classpath}': classpath,
     '${launcher_name}': 'SMUCL',
-    '${launcher_version}': '1.4.2',
+    '${launcher_version}': '1.5.0',
     '${user_properties}': '{}',
     '${resolution_width}': String((options.resolution && options.resolution.width) || 925),
     '${resolution_height}': String((options.resolution && options.resolution.height) || 530),

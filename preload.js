@@ -35,6 +35,11 @@ contextBridge.exposeInMainWorld('smucl', {
   save: (patch) => ipcRenderer.invoke('settings:save', patch),
   pickDir: () => ipcRenderer.invoke('dialog:pickDir'),
   listLoaders: (loader, mc) => ipcRenderer.invoke('loader:list', { loader, mc }),
+  searchPacks: (source, query, offset) => ipcRenderer.invoke('modpack:search', { source, query, offset }),
+  packVersions: (source, projectId) => ipcRenderer.invoke('modpack:versions', { source, projectId }),
+  installPack: (payload) => ipcRenderer.invoke('modpack:install', payload),
+  setCfKey: (key) => ipcRenderer.invoke('modpack:setKey', { key }),
+  onPack: (cb) => on('modpack:progress', cb),
   installLoader: (loader, mc, loaderVersion, url) =>
     ipcRenderer.invoke('loader:install', { loader, mc, loaderVersion, url }),
   onLoader: (cb) => on('loader:progress', cb),

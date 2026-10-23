@@ -163,24 +163,51 @@ function libraryUrl(lib, provider, src) {
   return { url: root + rel, rel };
 }
 
+/**
+ * 一个依赖给出多个候选地址：
+ *   镜像地址 → 声明的官方地址 → Maven Central
+ * 镜像偶尔缺件或抽风，靠回退把成功率拉回来（asm、guava 这类公共库 Central 一定有）
+ */
+function candidateUrls(lib, provider, src, rel, primary) {
+  const list = [primary];
+  const declared =
+    (lib.downloads && lib.downloads.artifact && lib.downloads.artifact.url) ||
+    (lib.url ? String(lib.url).replace(/\/?$/, '/') + rel : '');
+  if (declared && !list.includes(declared)) list.push(declared);
+  const central = `https://repo1.maven.org/maven2/${rel}`;
+  if (!list.includes(central)) list.push(central);
+  return list;
+}
+
 async function downloadLibraries(libs, gameDir, provider, src, onProgress) {
   const tasks = [];
   for (const lib of libs || []) {
     if (!lib.name) continue;
     const { url, rel } = libraryUrl(lib, provider, src);
-    tasks.push({ url, dest: path.join(gameDir, 'libraries', rel), name: lib.name });
+    tasks.push({
+      urls: candidateUrls(lib, provider, src, rel, url),
+      dest: path.join(gameDir, 'libraries', rel),
+      name: lib.name,
+    });
   }
 
   let done = 0;
   const failed = [];
-  await net.pool(tasks, 8, async (t) => {
-    try {
-      await net.download(t.url, t.dest, { retries: 2, timeout: 30000 });
-    } catch (e) {
-      failed.push({ name: t.name, error: e.message });
+  // 并发别开太大：海外 maven + 镜像混用，8 路容易互相挤掉超时
+  await net.pool(tasks, 4, async (t) => {
+    let lastErr = null;
+    for (const u of t.urls) {
+      try {
+        await net.download(u, t.dest, { retries: 1, timeout: 45000 });
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e;
+      }
     }
+    if (lastErr) failed.push({ name: t.name, error: lastErr.message });
     done++;
-    if (onProgress && (done % 5 === 0 || done === tasks.length)) {
+    if (onProgress && (done % 3 === 0 || done === tasks.length)) {
       onProgress({ stage: 'libs', done, total: tasks.length });
     }
   });

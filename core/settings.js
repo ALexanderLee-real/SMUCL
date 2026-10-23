@@ -29,6 +29,7 @@ const DEFAULTS = {
   lastSeenVersion: '', // 用于判断是否需要弹出更新日志
   gpuHighPerf: false, // 已把 javaw.exe 写入 Windows「高性能显卡」偏好
   saveGroup: 'folder', // 存档分组：folder | version | time
+  cfApiKey: '', // CurseForge API Key（仅本地保存，用于整合包搜索与下载）
 };
 
 let configPath = null;
