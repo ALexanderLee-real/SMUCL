@@ -138,19 +138,15 @@ function findLoggingConfig(mcDir, meta) {
   return fs.existsSync(p) ? p : null;
 }
 
-/** PCL 等启动器会把 natives 解压到 <实例>-natives，优先复用 */
-function resolveNativesDir(instanceDir, id) {
-  const candidates = [path.join(instanceDir, 'natives'), path.join(instanceDir, `${id}-natives`)];
-  for (const p of candidates) {
-    try {
-      if (fs.readdirSync(p).length > 0) return p;
-    } catch {
-      /* 不存在就试下一个 */
-    }
-  }
-  const fallback = path.join(instanceDir, 'natives');
-  fs.mkdirSync(fallback, { recursive: true });
-  return fallback;
+/**
+ * natives 统一平铺到 <实例>/natives。
+ * java.library.path 不递归子目录，而 PCL 等启动器留下的 <实例>-natives 是按模块分层的
+ * （lwjgl/lwjgl.dll、jna/*.dll），直接指过去会让 JVM 找不到 lwjgl.dll。
+ */
+function resolveNativesDir(instanceDir) {
+  const dir = path.join(instanceDir, 'natives');
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
 }
 
 /**
@@ -172,7 +168,7 @@ function build(id, options = {}) {
   // 版本隔离：mods / config / saves 在实例目录内时，--gameDir 必须指向实例目录
   const isolated = require('./dirs').isIsolatedInstance(instanceDir);
   const gameDir = isolated ? instanceDir : mcDir;
-  const nativesDir = resolveNativesDir(instanceDir, id);
+  const nativesDir = resolveNativesDir(instanceDir);
 
   const clientJar = resolveClientJar(mcDir, id, meta);
   const { classpath: libs, nativeJars } = libraryEntries(meta, mcDir);
@@ -262,6 +258,12 @@ function build(id, options = {}) {
 
   const extra = (options.jvmArgs || settings.jvmArgs || '').trim();
   if (extra) jvm.push(...extra.split(/\s+/).filter(Boolean));
+
+  // 版本 JSON 里的 library.path 常写成 ${natives_directory}/java 之类的子目录（该目录并不存在），
+  // 统一改指真正解压了 dll 的平铺目录
+  const libPathIndex = jvm.findIndex((a) => a.startsWith('-Djava.library.path='));
+  if (libPathIndex >= 0) jvm[libPathIndex] = `-Djava.library.path=${nativesDir}`;
+  else jvm.push(`-Djava.library.path=${nativesDir}`);
 
   // ---- 游戏参数 ----
   let game = [];
