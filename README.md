@@ -9,7 +9,7 @@
 [![Electron](https://img.shields.io/badge/Electron-45-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white)](#)
 [![License](https://img.shields.io/badge/license-MIT-3DA639)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.4.1-3b7dd8](#)
+[![Version](https://img.shields.io/badge/version-1.4.2-3b7dd8](#)
 [![Release](https://img.shields.io/github/v/release/Survaetr/SMUCL?label=release&color=3DA639)](https://github.com/Survaetr/SMUCL/releases)
 
 </div>
@@ -138,6 +138,13 @@ SMUCL/
 → 把 `dist/app-<version>.zip` 上传到对应 Release。
 
 ## 更新记录
+
+**v1.4.2**
+
+- 修复点击「导入整合包」报 `The "path" argument must be of type string`：函数带参数却直接挂到 onclick，首个参数成了鼠标事件对象
+- 合并社区 PR #4（[@ALexanderLee-real](https://github.com/ALexanderLee-real)）：natives 统一解压到 `<实例>/natives` 并重写 `java.library.path`，修复部分机器找不到 `lwjgl.dll` 无法启动
+- natives 包按 CPU 架构过滤，避免误加载 x86 / arm64 的 DLL
+- 主进程增加路径类型校验，非字符串路径返回可读提示
 
 **v1.4.1**
 

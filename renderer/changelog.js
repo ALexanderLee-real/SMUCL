@@ -5,6 +5,17 @@
  */
 window.CHANGELOG = [
   {
+    version: '1.4.2',
+    date: '2026-10-23',
+    title: '修好导入整合包，并合并社区修复',
+    items: [
+      '修复点击「导入整合包」弹出 The "path" argument must be of type string 的问题（函数带参数直接挂 onclick，会收到鼠标事件）',
+      '合并社区 PR #4（@ALexanderLee-real）：natives 统一解压到 <实例>/natives 并重写 java.library.path',
+      '上一项修掉了部分机器启动时报找不到 lwjgl.dll 的问题，同时按架构过滤 natives 包，避免加载到 x86/arm64 的 DLL',
+      '主进程增加了路径类型校验，异常输入会给出可读提示',
+    ],
+  },
+  {
     version: '1.4.1',
     date: '2026-10-23',
     title: '首页横幅的 Logo 归位',

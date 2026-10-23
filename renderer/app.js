@@ -584,7 +584,8 @@ function packRow(label, value) {
 }
 
 async function importPackFlow(presetFile) {
-  let file = presetFile;
+  // 直接挂在 onclick 上时第一个参数是 MouseEvent，这里必须挡掉
+  let file = typeof presetFile === 'string' ? presetFile : '';
   if (!file) {
     const picked = await api.pickPack();
     if (!picked.ok || !picked.data) return;
@@ -1312,7 +1313,7 @@ function bindEvents() {
   };
 
   $('#btnRefreshInstalled').onclick = refreshInstalledAndRender;
-  $('#btnImportPack').onclick = importPackFlow;
+  $('#btnImportPack').onclick = () => importPackFlow();
 
   // 模组加载器
   $$('#loaderSwitch .seg').forEach((b) => {

@@ -657,6 +657,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('pack:inspect', async (_e, { file }) => {
+    if (typeof file !== 'string' || !file) return { ok: false, error: '没有拿到有效的整合包路径' };
     try {
       return packLib.inspect(file);
     } catch (e) {
@@ -665,6 +666,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('pack:import', async (_e, { file, targetDir }) => {
+    if (typeof file !== 'string' || !file) return { ok: false, error: '没有拿到有效的整合包路径' };
     try {
       const dir = targetDir || settingsLib.all().mcDir;
       const r = await packLib.importPack({ zipPath: file, targetDir: dir });
